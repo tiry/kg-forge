@@ -12,9 +12,11 @@ I want to build a CLI tool that can be used to:
  - render graph
     - provides a way to nagivate the graphs
 
-The 3 sub commands should be `ingest`, `query`, `render`.
+The 3 main sub commands should be `ingest`, `query`, `render`.
 
-## What question we want to answer
+The main goal of this CLI is to help us figure out how we can build a Knowledged Graph from existing unstructured data.
+
+## What questions we want to answer
 
 This experiment aims at having a way to easily and quickly extract KG from a corpus of text.
 We want to easily be able to ingest content, look at the graph, update the definition and reprocess. 
@@ -24,6 +26,12 @@ The type of questions we are trying to answer include:
  - what is the best strategy to extract meaningful entities and topics from content?
  - what is the best strategy to store, organize, merge, prune a Knowledge Graph?
  - how do we create and maintain  useful ontology?
+
+The idea is to use this CLI tool as a way to experiment and tweak as we learn:
+
+ - create a bootstrap ontology and entities 
+ - ingest some content and see how this impacts the KG
+ - experiment in merging and pruning the KG (remove duplicated, add relations, ...)
 
 ## Scope of the experimentation
 
@@ -177,8 +185,25 @@ The call back should receive:
 
  - a list of all entities that were added to the graph
  - a client to query/update the knowledge graph
+ - a interactive_session client to interact with the user if the interactive flag was activated
 
 This call back has void return.
+
+### About KG manipulations
+
+Extracting entites from content is the easy part, adding these entities to a KG in a meaningful way is the tricky part.
+
+Inside the `process_after_batch` we may want to experiment with multiple approaches:
+
+ - misspelled entities
+ - similarly sounding entities like "Catherine J." instead of "Katherine Jones"
+ - abbreviated names like Kubernetes and K8S
+ - partial names like James Earl Jones and James Jones
+ 
+To solve some of these issues, we will need "a human im the loop".
+
+For that, let's add a `--interactive` (alias `--biraj`) to force the interactive mode for the `inject` command.
+In that mode, the `process_after_batch` code should have a way to access command line to ask questions to the user.
 
 ### Configuration
 
@@ -225,7 +250,6 @@ We need to be able to:
 The max result is set using `--max-results` with default at 10.
 
 Output format should be selectable : `--format` <json|text>
-
 
 #### `render`
 
