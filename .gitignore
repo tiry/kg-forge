@@ -35,8 +35,10 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
+*.cover.*
 .hypothesis/
 .pytest_cache/
+cov_html/
 
 # Virtual environments
 .env
