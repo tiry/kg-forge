@@ -1,0 +1,17 @@
+# Neo4j Configuration
+neo4j:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: password
+
+# AWS Bedrock Configuration
+aws:
+  access_key_id: your_access_key_here
+  secret_access_key: your_secret_key_here
+  default_region: us-east-1
+  bedrock_model_name: anthropic.claude-3-haiku-20240307-v1:0
+
+# Application Configuration
+app:
+  log_level: INFO
+  default_namespace: default
