@@ -64,19 +64,25 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        # Create or checkout badges branch
-        git fetch origin badges:badges 2>/dev/null || git checkout --orphan badges
+        # Save the badge file location
+        BADGE_FILE="$PWD/.github/coverage.svg"
         
-        # If we just created the branch, clean it
-        if [ ! -f .github/coverage.svg ]; then
-          git rm -rf . 2>/dev/null || true
-          mkdir -p .github
-        else
+        # Try to fetch and checkout badges branch, or create it if it doesn't exist
+        if git fetch origin badges:badges 2>/dev/null; then
+          # Branch exists, check it out
           git checkout badges
+        else
+          # Branch doesn't exist, create orphan branch
+          git checkout --orphan badges
+          # Clean all files from the new branch
+          git rm -rf . 2>/dev/null || true
         fi
         
-        # Copy the coverage badge
-        cp ../coverage.svg .github/coverage.svg 2>/dev/null || mv .github/coverage.svg .github/coverage.svg
+        # Create .github directory if needed
+        mkdir -p .github
+        
+        # Copy the badge
+        cp "$BADGE_FILE" .github/coverage.svg
         
         # Commit and push
         git add .github/coverage.svg
