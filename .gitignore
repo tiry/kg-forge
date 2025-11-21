@@ -70,6 +70,9 @@ Thumbs.db
 graph.html
 entities_extract/README.md
 
+# GitHub Actions artifacts
+.github/coverage.svg
+
 # Temporary files
 *.tmp
 *.temp
