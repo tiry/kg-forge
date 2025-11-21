@@ -7,6 +7,18 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "ReadMe.md").read_text()
 
+# Read requirements from requirements.txt
+def read_requirements(filename):
+    """Read requirements from a requirements file."""
+    requirements = []
+    with open(this_directory / filename) as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if line and not line.startswith('#'):
+                requirements.append(line)
+    return requirements
+
 # Read version from __init__.py
 version = {}
 with open("kg_forge/__init__.py") as fp:
@@ -21,13 +33,7 @@ setup(
     long_description_content_type="text/markdown",
     packages=find_packages(),
     python_requires=">=3.8",
-    install_requires=[
-        "click>=8.0.0",
-        "python-dotenv>=1.0.0",
-        "pydantic>=2.0.0",
-        "pyyaml>=6.0.0",
-        "rich>=13.0.0",
-    ],
+    install_requires=read_requirements("requirements.txt"),
     extras_require={
         "dev": [
             "pytest>=7.0.0",
