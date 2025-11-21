@@ -8,6 +8,7 @@ from kg_forge import __version__
 from kg_forge.config.settings import get_settings
 from kg_forge.utils.logging import setup_logging, get_logger
 from kg_forge.cli.ingest import ingest
+from kg_forge.cli.parse import parse_html
 from kg_forge.cli.query import query
 from kg_forge.cli.render import render
 from kg_forge.cli.neo4j_ops import neo4j_start, neo4j_stop, export_entities
@@ -65,6 +66,7 @@ def version(ctx: click.Context) -> None:
 
 # Add command groups
 cli.add_command(ingest)
+cli.add_command(parse_html)
 cli.add_command(query)
 cli.add_command(render)
 cli.add_command(neo4j_start)

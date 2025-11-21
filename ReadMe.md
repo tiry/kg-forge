@@ -230,7 +230,12 @@ This project is currently in early development. The following features are imple
 - [x] Configuration management with environment variables and YAML
 - [x] Logging setup
 - [x] Command parsing and validation
-- [ ] HTML parsing and content curation
+- [x] HTML parsing and content curation
+  - [x] Parse Confluence HTML exports
+  - [x] Convert HTML to Markdown
+  - [x] Extract metadata (title, breadcrumb, links)
+  - [x] Generate content hashes for change detection
+  - [x] LlamaIndex-compatible document models
 - [ ] Entity definition loading
 - [ ] LLM integration for entity extraction
 - [ ] Neo4j graph operations
