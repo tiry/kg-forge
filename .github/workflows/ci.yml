@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master ]
     paths-ignore:
       - '.github/coverage.svg'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ master ]
     paths-ignore:
       - '.github/coverage.svg'
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
         path: code-coverage-results.md
         
     - name: Commit coverage badge
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/master' && github.event_name == 'push'
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
