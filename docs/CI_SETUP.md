@@ -25,19 +25,17 @@ The workflow runs on every:
 The coverage badge is automatically:
 1. Generated during the CI workflow
 2. Saved to `.github/coverage.svg`
-3. Committed back to the repository (on `main` branch only)
-4. Displayed in the README
+3. Committed to a dedicated `badges` branch (keeps `master` branch clean)
+4. Displayed in the README via GitHub raw content URL
 
-The commit message includes `[skip ci]` to prevent infinite loops.
+### Badge Storage Strategy
 
-### Updating the README Badge
+The badge is stored in a separate `badges` branch to:
+- Keep the main codebase clean
+- Avoid triggering unnecessary CI runs
+- Separate code from generated artifacts
 
-Simply replace `YOUR_USERNAME/kg-forge` in the README with your actual repository path:
-
-```markdown
-[![CI](https://github.com/username/kg-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/username/kg-forge/actions/workflows/ci.yml)
-![Coverage](.github/coverage.svg)
-```
+The README references the badge using GitHub's raw content URL from the `badges` branch.
 
 ## Coverage Reports
 
@@ -111,7 +109,16 @@ These are already configured in the workflow file.
 
 ## Maintenance
 
-- Badge updates automatically on each `main` push
+- Badge updates automatically on each `master` push
+- Stored in dedicated `badges` branch
 - No tokens or secrets required
 - No external dependencies
 - Works entirely within GitHub
+
+## First Run Setup
+
+On the first workflow run, the `badges` branch will be automatically created as an orphan branch (no shared history with `master`). After the first successful run, the coverage badge will be available at:
+
+```
+https://raw.githubusercontent.com/YOUR_USERNAME/kg-forge/badges/.github/coverage.svg
+```

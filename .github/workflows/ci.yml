@@ -58,14 +58,30 @@ jobs:
         recreate: true
         path: code-coverage-results.md
         
-    - name: Commit coverage badge
+    - name: Commit coverage badge to badges branch
       if: github.ref == 'refs/heads/master' && github.event_name == 'push'
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
+        
+        # Create or checkout badges branch
+        git fetch origin badges:badges 2>/dev/null || git checkout --orphan badges
+        
+        # If we just created the branch, clean it
+        if [ ! -f .github/coverage.svg ]; then
+          git rm -rf . 2>/dev/null || true
+          mkdir -p .github
+        else
+          git checkout badges
+        fi
+        
+        # Copy the coverage badge
+        cp ../coverage.svg .github/coverage.svg 2>/dev/null || mv .github/coverage.svg .github/coverage.svg
+        
+        # Commit and push
         git add .github/coverage.svg
-        git diff --quiet && git diff --staged --quiet || git commit -m "Update coverage badge [skip ci]"
-        git push
+        git diff --quiet && git diff --staged --quiet || git commit -m "Update coverage badge"
+        git push origin badges
         
     - name: Archive coverage HTML report
       uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 # Knowledge Graph Forge (kg-forge)
 
 [![CI](https://github.com/tiry/kg-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/tiry/kg-forge/actions/workflows/ci.yml)
-![Coverage](.github/coverage.svg)
+![Coverage](https://raw.githubusercontent.com/tiry/kg-forge/badges/.github/coverage.svg)
 
 CLI tool for extracting entities from unstructured content and building knowledge graphs for experimentation and analysis.
 
