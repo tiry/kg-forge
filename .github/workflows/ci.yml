@@ -64,8 +64,8 @@ jobs:
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
-        # Save the badge file location
-        BADGE_FILE="$PWD/.github/coverage.svg"
+        # Copy badge to temp location (outside git working directory)
+        cp .github/coverage.svg /tmp/coverage.svg
         
         # Try to fetch and checkout badges branch, or create it if it doesn't exist
         if git fetch origin badges:badges 2>/dev/null; then
@@ -78,11 +78,9 @@ jobs:
           git rm -rf . 2>/dev/null || true
         fi
         
-        # Create .github directory if needed
+        # Create .github directory and copy badge back
         mkdir -p .github
-        
-        # Copy the badge
-        cp "$BADGE_FILE" .github/coverage.svg
+        cp /tmp/coverage.svg .github/coverage.svg
         
         # Commit and push
         git add .github/coverage.svg
