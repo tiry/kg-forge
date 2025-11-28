@@ -14,20 +14,33 @@ class Neo4jConfig(BaseModel):
     uri: str = Field(default="bolt://localhost:7687")
     username: str = Field(default="neo4j")
     password: str = Field(default="password")
+    database: str = Field(default="neo4j")
 
 
 class AWSConfig(BaseModel):
     """AWS Bedrock configuration."""
+    # Credential options - use any combination that works for your setup:
+    # 1. Explicit credentials (access_key_id + secret_access_key + optional session_token)
+    # 2. AWS profile (profile_name)
+    # 3. Environment variables (AWS_ACCESS_KEY_ID, etc.)
+    # 4. IAM roles, SSO, etc. (leave all credential fields None)
     access_key_id: Optional[str] = Field(default=None)
     secret_access_key: Optional[str] = Field(default=None)
+    session_token: Optional[str] = Field(default=None)
+    profile_name: Optional[str] = Field(default=None)
     default_region: str = Field(default="us-east-1")
     bedrock_model_name: str = Field(default="anthropic.claude-3-haiku-20240307-v1:0")
+    bedrock_max_tokens: int = Field(default=4000)
+    bedrock_temperature: float = Field(default=0.1)
 
 
 class AppConfig(BaseModel):
     """Application configuration."""
     log_level: str = Field(default="INFO")
     default_namespace: str = Field(default="default")
+    entities_extract_dir: str = Field(default="entities_extract")
+    ontology_pack: Optional[str] = Field(default=None)
+    ontology_packs_dir: str = Field(default="ontology_packs")
 
     @field_validator('log_level')
     @classmethod
@@ -131,10 +144,18 @@ class Settings(BaseModel):
             aws_config["access_key_id"] = os.getenv("AWS_ACCESS_KEY_ID")
         if os.getenv("AWS_SECRET_ACCESS_KEY"):
             aws_config["secret_access_key"] = os.getenv("AWS_SECRET_ACCESS_KEY")
+        if os.getenv("AWS_SESSION_TOKEN"):
+            aws_config["session_token"] = os.getenv("AWS_SESSION_TOKEN")
+        if os.getenv("AWS_PROFILE"):
+            aws_config["profile_name"] = os.getenv("AWS_PROFILE")
         if os.getenv("AWS_DEFAULT_REGION"):
             aws_config["default_region"] = os.getenv("AWS_DEFAULT_REGION")
         if os.getenv("BEDROCK_MODEL_NAME"):
             aws_config["bedrock_model_name"] = os.getenv("BEDROCK_MODEL_NAME")
+        if os.getenv("BEDROCK_MAX_TOKENS"):
+            aws_config["bedrock_max_tokens"] = int(os.getenv("BEDROCK_MAX_TOKENS"))
+        if os.getenv("BEDROCK_TEMPERATURE"):
+            aws_config["bedrock_temperature"] = float(os.getenv("BEDROCK_TEMPERATURE"))
         if aws_config:
             config["aws"] = aws_config
 
@@ -144,6 +165,12 @@ class Settings(BaseModel):
             app_config["log_level"] = os.getenv("LOG_LEVEL")
         if os.getenv("DEFAULT_NAMESPACE"):
             app_config["default_namespace"] = os.getenv("DEFAULT_NAMESPACE")
+        if os.getenv("ENTITIES_EXTRACT_DIR"):
+            app_config["entities_extract_dir"] = os.getenv("ENTITIES_EXTRACT_DIR")
+        if os.getenv("ONTOLOGY_PACK"):
+            app_config["ontology_pack"] = os.getenv("ONTOLOGY_PACK")
+        if os.getenv("ONTOLOGY_PACKS_DIR"):
+            app_config["ontology_packs_dir"] = os.getenv("ONTOLOGY_PACKS_DIR")
         if app_config:
             config["app"] = app_config
 

@@ -67,8 +67,22 @@ Thumbs.db
 
 # Application specific
 *.log
-graph.html
+*.html
 entities_extract/README.md
+
+# Generated output files
+output/
+test_*.py
+!tests/test_*.py
+
+# Personal configuration and sensitive data
+.env
+kg_forge.yaml
+!kg_forge.yaml.example
+
+# Neo4j data (if using local instance)
+data/
+neo4j/
 
 # GitHub Actions artifacts
 .github/coverage.svg
@@ -76,3 +90,15 @@ entities_extract/README.md
 # Temporary files
 *.tmp
 *.temp
+*.bak
+*.backup
+
+# Generated documentation
+_build/
+docs/_build/
+docs/source/_autosummary/
+
+# Docker volumes and data
+docker-data/
+neo4j-data/
+postgres-data/

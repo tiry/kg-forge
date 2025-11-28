@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 import pytest
 import yaml
+from unittest.mock import patch
 
 from kg_forge.config.settings import Settings, get_settings
 
@@ -25,18 +26,33 @@ def test_default_settings():
 
 
 def test_env_settings():
-    """Test settings from environment variables."""
-    os.environ["NEO4J_URI"] = "bolt://testhost:7687"
-    os.environ["LOG_LEVEL"] = "DEBUG"
+    """Test settings from environment variables (when no YAML config exists)."""
+    # Save original values
+    original_neo4j_uri = os.environ.get("NEO4J_URI")
+    original_log_level = os.environ.get("LOG_LEVEL")
     
-    settings = Settings.load_config()
-    
-    assert settings.neo4j.uri == "bolt://testhost:7687"
-    assert settings.app.log_level == "DEBUG"
-    
-    # Clean up
-    del os.environ["NEO4J_URI"]
-    del os.environ["LOG_LEVEL"]
+    try:
+        os.environ["NEO4J_URI"] = "bolt://testhost:7687"
+        os.environ["LOG_LEVEL"] = "DEBUG"
+        
+        # Mock the YAML loading to return None so env vars take precedence
+        with patch.object(Settings, '_load_yaml_config', return_value=None):
+            settings = Settings.load_config()
+            
+            assert settings.neo4j.uri == "bolt://testhost:7687"
+            assert settings.app.log_level == "DEBUG"
+        
+    finally:
+        # Clean up - restore original values or delete if they didn't exist
+        if original_neo4j_uri is not None:
+            os.environ["NEO4J_URI"] = original_neo4j_uri
+        elif "NEO4J_URI" in os.environ:
+            del os.environ["NEO4J_URI"]
+            
+        if original_log_level is not None:
+            os.environ["LOG_LEVEL"] = original_log_level
+        elif "LOG_LEVEL" in os.environ:
+            del os.environ["LOG_LEVEL"]
 
 
 def test_yaml_settings():

@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Read the contents of README file
 this_directory = Path(__file__).parent
-long_description = (this_directory / "ReadMe.md").read_text()
+long_description = (this_directory / "ReadMe.md").read_text(encoding="utf-8")
 
 # Read requirements from requirements.txt
 def read_requirements(filename):

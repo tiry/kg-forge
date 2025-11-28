@@ -3,7 +3,7 @@
 **Status**: Completed  
 **Created**: 2025-11-21  
 **Completed**: 2025-11-21  
-**Related to**: Step 2 - HTML Loading and Parsing
+**Related to**: Step 3 - HTML Loading and Parsing
 
 ## Overview
 

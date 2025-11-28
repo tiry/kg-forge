@@ -1,0 +1,59 @@
+id: ai_ml_confluence
+name: AI/ML Confluence Ontology
+description: Entity definitions for AI/ML products, components, teams, and technologies as found in Confluence documentation
+version: 1.0.0
+author: KG Forge Team
+license: MIT
+tags:
+  - ai
+  - ml
+  - confluence
+  - engineering
+  - products
+
+# Visual styling configuration for entities and relationships
+styles:
+  entity_colors:
+    Product: "#2ca02c"
+    EngineeringTeam: "#ff7f0e" 
+    Technology: "#9467bd"
+    Component: "#8c564b"
+    Workstream: "#e377c2"
+    AiMlDomain: "#7f7f7f"
+  
+  entity_shapes:
+    Product: "dot"
+    EngineeringTeam: "dot"
+    Technology: "dot"
+    Component: "dot" 
+    Workstream: "dot"
+    AiMlDomain: "dot"
+  
+  relationship_colors:
+    WORKS_ON: "#2ca02c"
+    COLLABORATES_WITH: "#1f77b4"
+    USES: "#9467bd"
+    IMPLEMENTS: "#ff7f0e"
+    BELONGS_TO: "#8c564b"
+  
+  relationship_styles:
+    WORKS_ON:
+      width: 2
+      arrows: "to"
+      dashes: false
+    COLLABORATES_WITH:
+      width: 2 
+      arrows: "to"
+      dashes: false
+    USES:
+      width: 2
+      arrows: "to"
+      dashes: true
+    IMPLEMENTS:
+      width: 2
+      arrows: "to" 
+      dashes: false
+    BELONGS_TO:
+      width: 1
+      arrows: "to"
+      dashes: true

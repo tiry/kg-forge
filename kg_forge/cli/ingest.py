@@ -1,12 +1,16 @@
 """Ingest command for kg-forge CLI."""
 
+import sys
 import click
 from pathlib import Path
 from typing import Optional
 from rich.console import Console
+from rich.table import Table
 
+from kg_forge.config.settings import get_settings
+from kg_forge.ingest.pipeline import IngestPipeline
+from kg_forge.llm.exceptions import ExtractionAbortError
 from kg_forge.utils.logging import get_logger
-from kg_forge.parsers import ConfluenceHTMLParser, DocumentLoader
 
 console = Console()
 logger = get_logger(__name__)
@@ -17,144 +21,176 @@ logger = get_logger(__name__)
     "--source", 
     required=True,
     type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
-    help="Path to source directory containing HTML files"
-)
-@click.option(
-    "--output-dir",
-    type=click.Path(path_type=Path),
-    help="Output directory for parsed markdown files (uses doc_id as filename)"
+    help="Root directory containing HTML files to process"
 )
 @click.option(
     "--namespace", 
-    default=None,
-    help="Experiment namespace (alphanumeric only, default from config)"
+    help="Namespace for this ingest run (default from config)"
 )
 @click.option(
     "--dry-run", 
     is_flag=True,
-    help="Extract entities but don't write to graph"
+    help="Run pipeline without writing to Neo4j"
 )
 @click.option(
     "--refresh", 
     is_flag=True,
-    help="Re-import even if content hash matches"
+    help="Reprocess all documents ignoring content hash"
 )
 @click.option(
     "--interactive", "--biraj", 
     is_flag=True,
-    help="Enable interactive mode"
+    help="Enable interactive mode for hooks"
 )
 @click.option(
     "--prompt-template", 
     type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
-    help="Override prompt template file"
+    help="Override default prompt template file"
 )
 @click.option(
     "--model", 
-    help="Override bedrock model name"
+    help="Override LLM model name from config"
 )
 @click.option(
-    "--max-results", 
+    "--max-docs", 
     type=int,
-    default=10,
-    help="Maximum results to return"
+    help="Limit number of documents processed (for debugging)"
 )
-@click.pass_context
+@click.option(
+    "--fake-llm", 
+    is_flag=True,
+    help="Use fake LLM for testing (no API calls)"
+)
 def ingest(
-    ctx: click.Context,
     source: Path,
-    output_dir: Optional[Path] = None,
     namespace: Optional[str] = None,
     dry_run: bool = False,
     refresh: bool = False,
     interactive: bool = False,
     prompt_template: Optional[Path] = None,
     model: Optional[str] = None,
-    max_results: int = 10
+    max_docs: Optional[int] = None,
+    fake_llm: bool = False
 ) -> None:
     """
-    Ingest HTML files from a source directory and extract entities.
+    Ingest HTML files from source directory into knowledge graph.
     
-    This command processes HTML files in the specified directory,
-    extracts entities using LLM analysis, and stores them in the
-    knowledge graph.
+    This command runs the complete ingest pipeline:
+    1. Discovers HTML files in source directory
+    2. Parses HTML to curated documents 
+    3. Extracts entities using LLM
+    4. Stores documents and entities in Neo4j
+    5. Creates relationships between entities
     
-    If --output-dir is specified, parsed markdown content will be
-    written to files named by document ID.
+    SOURCE: Root directory containing HTML files to process
     """
-    settings = ctx.obj["settings"]
     
-    # Use namespace from parameter or default from settings
-    target_namespace = namespace or settings.app.default_namespace
-    
-    # Validate namespace
     try:
-        settings.validate_namespace(target_namespace)
-    except ValueError as e:
-        console.print(f"[red]Invalid namespace: {e}[/red]")
-        ctx.exit(1)
+        # Load configuration
+        config = get_settings()
+        
+        # Validate namespace
+        target_namespace = namespace or config.app.default_namespace
+        try:
+            config.validate_namespace(target_namespace)
+        except ValueError as e:
+            console.print(f"[red]Invalid namespace: {e}[/red]")
+            sys.exit(1)
+        
+        console.print(f"[bold blue]KG Forge Ingest Pipeline[/bold blue]")
+        console.print(f"Source: {source}")
+        console.print(f"Namespace: {target_namespace}")
+        
+        if dry_run:
+            console.print("[yellow]Mode: DRY RUN (no database writes)[/yellow]")
+        if refresh:
+            console.print("[yellow]Mode: REFRESH (reprocess all documents)[/yellow]")
+        if interactive:
+            console.print("[cyan]Mode: INTERACTIVE (hooks enabled)[/cyan]")
+        if fake_llm:
+            console.print("[cyan]LLM: FAKE (testing mode)[/cyan]")
+        elif model:
+            console.print(f"LLM Model: {model}")
+        if max_docs:
+            console.print(f"Limit: {max_docs} documents")
+        
+        console.print()
+        
+        # Initialize and run pipeline
+        pipeline = IngestPipeline(
+            source_path=source,
+            namespace=target_namespace,
+            dry_run=dry_run,
+            refresh=refresh,
+            interactive=interactive,
+            prompt_template=prompt_template,
+            model=model,
+            max_docs=max_docs,
+            fake_llm=fake_llm,
+            config=config
+        )
+        
+        # Execute pipeline
+        console.print("[bold]Starting ingest pipeline...[/bold]")
+        metrics = pipeline.run()
+        
+        # Display results summary
+        _display_results(metrics, dry_run)
+        
+        # Exit with appropriate code
+        if metrics.has_consecutive_failures:
+            console.print(f"[red]ERROR: Exceeded maximum consecutive failures ({metrics.consecutive_failures})[/red]")
+            sys.exit(2)
+        elif metrics.docs_failed > 0:
+            console.print(f"[yellow]WARNING: {metrics.docs_failed} documents failed processing[/yellow]")
+        
+        console.print("[bold green]✓ Ingest pipeline completed successfully[/bold green]")
+        
+    except ExtractionAbortError as e:
+        console.print(f"[red]Ingest aborted: {e}[/red]")
+        sys.exit(2)
+    except (ConnectionError, FileNotFoundError) as e:
+        console.print(f"[red]Configuration error: {e}[/red]")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Unexpected error: {e}[/red]")
+        logger.exception("Ingest pipeline failed")
+        sys.exit(3)
+
+
+def _display_results(metrics, dry_run: bool) -> None:
+    """Display ingest results summary."""
+    console.print("\n[bold]Ingest Results Summary[/bold]")
     
-    logger.info(f"Starting ingest from {source}")
-    logger.info(f"Target namespace: {target_namespace}")
+    # Create metrics table
+    table = Table(title="Processing Statistics")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Count", style="green")
+    
+    table.add_row("Files Discovered", str(metrics.files_discovered))
+    table.add_row("Documents Processed", str(metrics.docs_processed))
+    table.add_row("Documents Skipped", f"{metrics.docs_skipped} (unchanged)")
+    table.add_row("Documents Failed", str(metrics.docs_failed))
+    table.add_row("Entities Created", str(metrics.entities_created))
+    table.add_row("Entities Updated", str(metrics.entities_updated))
+    table.add_row("MENTIONS Created", str(metrics.mentions_created))
+    table.add_row("Relations Created", str(metrics.relations_created))
+    
+    console.print(table)
+    
+    # Performance metrics
+    console.print(f"\n[bold]Performance:[/bold]")
+    console.print(f"  Total Time: {metrics.processing_time:.1f}s")
+    console.print(f"  LLM Time: {metrics.llm_time:.1f}s")
+    console.print(f"  Neo4j Time: {metrics.neo4j_time:.1f}s") 
+    console.print(f"  Success Rate: {metrics.success_rate:.1f}%")
     
     if dry_run:
-        logger.info("Dry run mode - no changes will be persisted")
+        console.print(f"\n[yellow]DRY RUN: No changes were written to the database[/yellow]")
     
-    if refresh:
-        logger.info("Refresh mode - will re-import existing content")
-    
-    if interactive:
-        logger.info("Interactive mode enabled")
-    
-    if prompt_template:
-        logger.info(f"Using custom prompt template: {prompt_template}")
-    
-    if model:
-        logger.info(f"Using custom model: {model}")
-    
-    # If output_dir is specified, parse and export markdown
-    if output_dir:
-        console.print(f"\n[bold blue]Parsing HTML and exporting markdown to:[/bold blue] {output_dir}\n")
-        
-        # Create output directory if it doesn't exist
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Parse HTML files
-        parser = ConfluenceHTMLParser()
-        loader = DocumentLoader(parser)
-        
-        try:
-            documents = loader.load_from_directory(source)
-            console.print(f"[green]✓ Parsed {len(documents)} documents[/green]\n")
-            
-            # Write markdown files
-            for doc in documents:
-                output_file = output_dir / f"{doc.doc_id}.md"
-                
-                # Create file content with metadata header
-                content = f"""# {doc.title}
-
-**Document ID:** {doc.doc_id}  
-**Source:** {doc.source_file}  
-**Breadcrumb:** {' → '.join(doc.breadcrumb)}  
-**Content Hash:** {doc.content_hash}
-
----
-
-{doc.text}
-"""
-                
-                output_file.write_text(content, encoding='utf-8')
-                console.print(f"[dim]• Wrote:[/dim] {output_file.name}")
-            
-            console.print(f"\n[bold green]✓ Successfully exported {len(documents)} markdown files[/bold green]")
-            
-        except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            ctx.exit(1)
-    
-    else:
-        # TODO: Implement actual ingestion logic in later steps
-        console.print("[yellow]Ingestion functionality will be implemented in Step 6[/yellow]")
-    
-    logger.info("Ingest command completed")
+    if metrics.failure_details:
+        console.print(f"\n[red]Recent Failures:[/red]")
+        for error in metrics.failure_details[-5:]:  # Show last 5 errors
+            console.print(f"  • {error}")
+        if len(metrics.failure_details) > 5:
+            console.print(f"  ... and {len(metrics.failure_details) - 5} more")

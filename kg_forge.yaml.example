@@ -8,6 +8,7 @@ neo4j:
 aws:
   access_key_id: your_access_key_here
   secret_access_key: your_secret_key_here
+  session_token: your_session_token_here  # Optional, for temporary credentials
   default_region: us-east-1
   bedrock_model_name: anthropic.claude-3-haiku-20240307-v1:0
 
@@ -15,3 +16,7 @@ aws:
 app:
   log_level: INFO
   default_namespace: default
+  # Ontology pack to use for entity definitions and styling
+  ontology_pack: ai_ml_confluence
+  # Directory containing ontology packs (relative to project root)
+  ontology_packs_dir: ontology_packs

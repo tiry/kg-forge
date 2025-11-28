@@ -1,4 +1,4 @@
-# Step 1: CLI Foundation
+# Step 0: CLI Foundation
 
 ## Overview
 
@@ -205,7 +205,8 @@ kg_forge/
 ├── .gitignore
 ├── README.md
 └── specs/
-    ├── seed.md
+    ├── seed_product_md
+    |── seed_architecture_md
     └── 01-cli-foundation.md
 ```
 
