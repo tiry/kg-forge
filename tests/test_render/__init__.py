@@ -1,0 +1,1 @@
+"""Test module init for render tests."""

@@ -205,7 +205,8 @@ kg_forge/
 ├── .gitignore
 ├── README.md
 └── specs/
-    ├── seed.md
+    ├── seed_product_md
+    |── seed_architecture_md
     └── 01-cli-foundation.md
 ```
 

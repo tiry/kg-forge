@@ -7,6 +7,15 @@ rich>=13.0.0
 beautifulsoup4>=4.12.0
 markdownify>=0.11.0
 lxml>=4.9.0
+neo4j>=5.0.0
+
+# LLM Integration
+llama-index-llms-bedrock>=0.1.0
+boto3>=1.34.0
+botocore>=1.34.0
+
+# Graph Rendering
+jinja2>=3.0.0
 
 # Development dependencies
 pytest>=7.0.0

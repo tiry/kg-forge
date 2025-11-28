@@ -6,6 +6,8 @@ from rich.console import Console
 from rich.table import Table
 import json
 
+from kg_forge.config.settings import get_settings
+from kg_forge.graph.neo4j_client import Neo4jClient
 from kg_forge.utils.logging import get_logger
 
 console = Console()
@@ -55,10 +57,14 @@ def query(
         console.print(f"[red]Invalid namespace: {e}[/red]")
         ctx.exit(1)
     
+    # Initialize Neo4j client
+    neo4j_client = Neo4jClient(settings)
+    
     # Store query context for subcommands
     ctx.obj["query_namespace"] = target_namespace
     ctx.obj["query_format"] = output_format
     ctx.obj["query_max_results"] = max_results
+    ctx.obj["neo4j_client"] = neo4j_client
 
 
 @query.command("list-types")
@@ -69,19 +75,33 @@ def list_types(ctx: click.Context) -> None:
     output_format = ctx.obj["query_format"]
     
     logger.info(f"Listing entity types for namespace: [bold]{namespace}[/bold]")
+    neo4j_client = ctx.obj["neo4j_client"]
     
-    # TODO: Implement actual query logic in later steps
-    mock_types = ["Product", "Component", "Technology", "EngineeringTeam", "Topic"]
-    
-    if output_format == "json":
-        result = {"namespace": namespace, "entity_types": mock_types}
-        console.print(json.dumps(result, indent=2))
-    else:
-        console.print(f"[bold]Entity Types in namespace '{namespace}':[/bold]")
-        for entity_type in mock_types:
-            console.print(f"  • {entity_type}")
-    
-    console.print("[yellow]Query functionality will be implemented in Step 4[/yellow]")
+    try:
+        # Query distinct entity types from Neo4j
+        query = """
+        MATCH (e:Entity {namespace: $namespace})
+        RETURN DISTINCT e.entity_type as entity_type
+        ORDER BY entity_type
+        """
+        
+        results = neo4j_client.execute_query(query, {"namespace": namespace})
+        entity_types = [record["entity_type"] for record in results]
+        
+        if output_format == "json":
+            result = {"namespace": namespace, "entity_types": entity_types}
+            console.print(json.dumps(result, indent=2))
+        else:
+            console.print(f"[bold]Entity Types in namespace '{namespace}':[/bold]")
+            if entity_types:
+                for entity_type in entity_types:
+                    console.print(f"  • {entity_type}")
+            else:
+                console.print("  [yellow]No entity types found[/yellow]")
+                
+    except Exception as e:
+        console.print(f"[red]Error querying entity types: {e}[/red]")
+        ctx.exit(1)
 
 
 @query.command("list-entities")
@@ -99,33 +119,56 @@ def list_entities(ctx: click.Context, entity_type: str) -> None:
     max_results = ctx.obj["query_max_results"]
     
     logger.info(f"Listing entities of type '{entity_type}' in namespace: [bold]{namespace}[/bold]")
+    neo4j_client = ctx.obj["neo4j_client"]
     
-    # TODO: Implement actual query logic in later steps
-    mock_entities = [
-        {"name": f"Sample {entity_type} 1", "confidence": 0.95},
-        {"name": f"Sample {entity_type} 2", "confidence": 0.87}
-    ]
-    
-    if output_format == "json":
-        result = {
+    try:
+        # Query entities of specified type from Neo4j
+        query = """
+        MATCH (e:Entity {namespace: $namespace, entity_type: $entity_type})
+        RETURN e.name as name, e.confidence as confidence
+        ORDER BY e.confidence DESC, e.name
+        LIMIT $max_results
+        """
+        
+        results = neo4j_client.execute_query(query, {
             "namespace": namespace,
             "entity_type": entity_type,
-            "max_results": max_results,
-            "entities": mock_entities
-        }
-        console.print(json.dumps(result, indent=2))
-    else:
-        console.print(f"[bold]{entity_type} entities in namespace '{namespace}':[/bold]")
-        table = Table(show_header=True)
-        table.add_column("Name")
-        table.add_column("Confidence")
+            "max_results": max_results
+        })
         
-        for entity in mock_entities:
-            table.add_row(entity["name"], f"{entity['confidence']:.2f}")
+        entities = [
+            {
+                "name": record["name"],
+                "confidence": float(record["confidence"]) if record["confidence"] else 1.0
+            }
+            for record in results
+        ]
         
-        console.print(table)
-    
-    console.print("[yellow]Query functionality will be implemented in Step 4[/yellow]")
+        if output_format == "json":
+            result = {
+                "namespace": namespace,
+                "entity_type": entity_type,
+                "max_results": max_results,
+                "entities": entities
+            }
+            console.print(json.dumps(result, indent=2))
+        else:
+            console.print(f"[bold]{entity_type} entities in namespace '{namespace}':[/bold]")
+            if entities:
+                table = Table(show_header=True)
+                table.add_column("Name")
+                table.add_column("Confidence")
+                
+                for entity in entities:
+                    table.add_row(entity["name"], f"{entity['confidence']:.2f}")
+                
+                console.print(table)
+            else:
+                console.print(f"  [yellow]No {entity_type} entities found[/yellow]")
+                
+    except Exception as e:
+        console.print(f"[red]Error querying entities: {e}[/red]")
+        ctx.exit(1)
 
 
 @query.command("list-docs")
@@ -137,32 +180,56 @@ def list_docs(ctx: click.Context) -> None:
     max_results = ctx.obj["query_max_results"]
     
     logger.info(f"Listing documents in namespace: [bold]{namespace}[/bold]")
+    neo4j_client = ctx.obj["neo4j_client"]
     
-    # TODO: Implement actual query logic in later steps
-    mock_docs = [
-        {"doc_id": "platform/intro", "source_path": "platform/intro.html"},
-        {"doc_id": "platform/architecture", "source_path": "platform/architecture.html"}
-    ]
-    
-    if output_format == "json":
-        result = {
+    try:
+        # Query documents from Neo4j
+        query = """
+        MATCH (d:Doc {namespace: $namespace})
+        RETURN d.doc_id as doc_id, d.source_file as source_path, d.title as title
+        ORDER BY d.doc_id
+        LIMIT $max_results
+        """
+        
+        results = neo4j_client.execute_query(query, {
             "namespace": namespace,
-            "max_results": max_results,
-            "documents": mock_docs
-        }
-        console.print(json.dumps(result, indent=2))
-    else:
-        console.print(f"[bold]Documents in namespace '{namespace}':[/bold]")
-        table = Table(show_header=True)
-        table.add_column("Document ID")
-        table.add_column("Source Path")
+            "max_results": max_results
+        })
         
-        for doc in mock_docs:
-            table.add_row(doc["doc_id"], doc["source_path"])
+        documents = [
+            {
+                "doc_id": record["doc_id"],
+                "source_path": record["source_path"] or "unknown",
+                "title": record["title"] or "Untitled"
+            }
+            for record in results
+        ]
         
-        console.print(table)
-    
-    console.print("[yellow]Query functionality will be implemented in Step 4[/yellow]")
+        if output_format == "json":
+            result = {
+                "namespace": namespace,
+                "max_results": max_results,
+                "documents": documents
+            }
+            console.print(json.dumps(result, indent=2))
+        else:
+            console.print(f"[bold]Documents in namespace '{namespace}':[/bold]")
+            if documents:
+                table = Table(show_header=True)
+                table.add_column("Document ID")
+                table.add_column("Source Path")
+                table.add_column("Title")
+                
+                for doc in documents:
+                    table.add_row(doc["doc_id"], doc["source_path"], doc["title"])
+                
+                console.print(table)
+            else:
+                console.print("  [yellow]No documents found[/yellow]")
+                
+    except Exception as e:
+        console.print(f"[red]Error querying documents: {e}[/red]")
+        ctx.exit(1)
 
 
 @query.command("show-doc")
@@ -179,28 +246,70 @@ def show_doc(ctx: click.Context, doc_id: str) -> None:
     output_format = ctx.obj["query_format"]
     
     logger.info(f"Showing document '{doc_id}' in namespace: [bold]{namespace}[/bold]")
+    neo4j_client = ctx.obj["neo4j_client"]
     
-    # TODO: Implement actual query logic in later steps
-    mock_doc = {
-        "doc_id": doc_id,
-        "namespace": namespace,
-        "source_path": f"{doc_id}.html",
-        "content_hash": "abc123...",
-        "entities_mentioned": ["Product A", "Team B"]
-    }
-    
-    if output_format == "json":
-        console.print(json.dumps(mock_doc, indent=2))
-    else:
-        console.print(f"[bold]Document: {doc_id}[/bold]")
-        console.print(f"Namespace: {namespace}")
-        console.print(f"Source Path: {mock_doc['source_path']}")
-        console.print(f"Content Hash: {mock_doc['content_hash']}")
-        console.print("Entities Mentioned:")
-        for entity in mock_doc["entities_mentioned"]:
-            console.print(f"  • {entity}")
-    
-    console.print("[yellow]Query functionality will be implemented in Step 4[/yellow]")
+    try:
+        # Query document details and mentioned entities from Neo4j
+        doc_query = """
+        MATCH (d:Doc {namespace: $namespace, doc_id: $doc_id})
+        RETURN d.doc_id as doc_id, d.source_file as source_path, d.title as title, 
+               d.content_hash as content_hash, d.namespace as namespace
+        """
+        
+        entities_query = """
+        MATCH (d:Doc {namespace: $namespace, doc_id: $doc_id})-[:MENTIONS]->(e:Entity)
+        RETURN e.name as name, e.entity_type as type
+        ORDER BY e.entity_type, e.name
+        """
+        
+        doc_results = neo4j_client.execute_query(doc_query, {
+            "namespace": namespace,
+            "doc_id": doc_id
+        })
+        
+        if not doc_results:
+            console.print(f"[red]Document '{doc_id}' not found in namespace '{namespace}'[/red]")
+            ctx.exit(1)
+            
+        doc_record = doc_results[0]
+        
+        entities_results = neo4j_client.execute_query(entities_query, {
+            "namespace": namespace,
+            "doc_id": doc_id
+        })
+        
+        entities_mentioned = [
+            {"name": record["name"], "type": record["type"]}
+            for record in entities_results
+        ]
+        
+        doc_data = {
+            "doc_id": doc_record["doc_id"],
+            "namespace": doc_record["namespace"],
+            "source_path": doc_record["source_path"] or "unknown",
+            "title": doc_record["title"] or "Untitled",
+            "content_hash": doc_record["content_hash"] or "unknown",
+            "entities_mentioned": entities_mentioned
+        }
+        
+        if output_format == "json":
+            console.print(json.dumps(doc_data, indent=2))
+        else:
+            console.print(f"[bold]Document: {doc_id}[/bold]")
+            console.print(f"Namespace: {namespace}")
+            console.print(f"Title: {doc_data['title']}")
+            console.print(f"Source Path: {doc_data['source_path']}")
+            console.print(f"Content Hash: {doc_data['content_hash'][:12]}...")
+            console.print("\n[bold]Entities Mentioned:[/bold]")
+            if entities_mentioned:
+                for entity in entities_mentioned:
+                    console.print(f"  • {entity['name']} ({entity['type']})")
+            else:
+                console.print("  [yellow]No entities found[/yellow]")
+                
+    except Exception as e:
+        console.print(f"[red]Error querying document: {e}[/red]")
+        ctx.exit(1)
 
 
 @query.command("find-related")
@@ -223,32 +332,59 @@ def find_related(ctx: click.Context, entity: str, entity_type: str) -> None:
     max_results = ctx.obj["query_max_results"]
     
     logger.info(f"Finding entities related to '{entity}' ({entity_type}) in namespace: [bold]{namespace}[/bold]")
+    neo4j_client = ctx.obj["neo4j_client"]
     
-    # TODO: Implement actual query logic in later steps
-    mock_related = [
-        {"entity": "Related Entity 1", "type": "Component", "relationship": "USES"},
-        {"entity": "Related Entity 2", "type": "Technology", "relationship": "IMPLEMENTS"}
-    ]
-    
-    if output_format == "json":
-        result = {
+    try:
+        # Query related entities from Neo4j
+        query = """
+        MATCH (source:Entity {namespace: $namespace, name: $entity, entity_type: $entity_type})
+        MATCH (source)-[r]-(related:Entity)
+        WHERE related.namespace = $namespace
+        RETURN related.name as entity, related.entity_type as type, type(r) as relationship
+        ORDER BY related.entity_type, related.name
+        LIMIT $max_results
+        """
+        
+        results = neo4j_client.execute_query(query, {
             "namespace": namespace,
-            "source_entity": entity,
-            "source_type": entity_type,
-            "max_results": max_results,
-            "related_entities": mock_related
-        }
-        console.print(json.dumps(result, indent=2))
-    else:
-        console.print(f"[bold]Entities related to '{entity}' ({entity_type}):[/bold]")
-        table = Table(show_header=True)
-        table.add_column("Entity")
-        table.add_column("Type")
-        table.add_column("Relationship")
+            "entity": entity,
+            "entity_type": entity_type,
+            "max_results": max_results
+        })
         
-        for related in mock_related:
-            table.add_row(related["entity"], related["type"], related["relationship"])
+        related_entities = [
+            {
+                "entity": record["entity"],
+                "type": record["type"],
+                "relationship": record["relationship"]
+            }
+            for record in results
+        ]
         
-        console.print(table)
-    
-    console.print("[yellow]Query functionality will be implemented in Step 4[/yellow]")
+        if output_format == "json":
+            result = {
+                "namespace": namespace,
+                "source_entity": entity,
+                "source_type": entity_type,
+                "max_results": max_results,
+                "related_entities": related_entities
+            }
+            console.print(json.dumps(result, indent=2))
+        else:
+            console.print(f"[bold]Entities related to '{entity}' ({entity_type}):[/bold]")
+            if related_entities:
+                table = Table(show_header=True)
+                table.add_column("Entity")
+                table.add_column("Type")
+                table.add_column("Relationship")
+                
+                for related in related_entities:
+                    table.add_row(related["entity"], related["type"], related["relationship"])
+                
+                console.print(table)
+            else:
+                console.print(f"  [yellow]No related entities found for '{entity}'[/yellow]")
+                
+    except Exception as e:
+        console.print(f"[red]Error querying related entities: {e}[/red]")
+        ctx.exit(1)

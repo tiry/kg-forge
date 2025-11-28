@@ -11,7 +11,8 @@ from kg_forge.cli.ingest import ingest
 from kg_forge.cli.parse import parse_html
 from kg_forge.cli.query import query
 from kg_forge.cli.render import render
-from kg_forge.cli.neo4j_ops import neo4j_start, neo4j_stop, export_entities
+
+from kg_forge.cli.entities import entities
 
 
 # Create Rich console for output
@@ -69,9 +70,15 @@ cli.add_command(ingest)
 cli.add_command(parse_html)
 cli.add_command(query)
 cli.add_command(render)
-cli.add_command(neo4j_start)
-cli.add_command(neo4j_stop)
-cli.add_command(export_entities)
+cli.add_command(entities)
+
+# Import and add the neo4j group from updated neo4j_ops.py
+from kg_forge.cli.neo4j_ops import neo4j
+cli.add_command(neo4j)
+
+# Import and add the llm-test command
+from kg_forge.cli.llm_test import llm_test
+cli.add_command(llm_test)
 
 
 def main() -> None:

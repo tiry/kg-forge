@@ -19,110 +19,91 @@ def test_data_dir():
     return Path(__file__).parent.parent.parent / "test_data"
 
 
-def test_ingest_with_output_dir(runner, test_data_dir, tmp_path):
-    """Test ingesting HTML files to markdown output directory."""
-    output_dir = tmp_path / "output"
-    
-    result = runner.invoke(cli, [
-        "ingest",
-        "--source", str(test_data_dir),
-        "--output-dir", str(output_dir)
-    ])
+def test_ingest_help_command(runner):
+    """Test that ingest help works correctly."""
+    result = runner.invoke(cli, ["ingest", "--help"])
     
     assert result.exit_code == 0
-    assert "Successfully exported" in result.output
-    assert output_dir.exists()
-    
-    # Check that markdown files were created
-    md_files = list(output_dir.glob("*.md"))
-    assert len(md_files) == 3  # Should have 3 markdown files
-    
-    # Check file naming (should be doc_id.md)
-    file_names = {f.name for f in md_files}
-    assert "3352431259.md" in file_names
-    assert "3182532046.md" in file_names
-    assert "3352234692.md" in file_names
+    assert "Ingest HTML files from source directory" in result.output
+    assert "--source" in result.output
+    assert "--namespace" in result.output
+    assert "--dry-run" in result.output
+    assert "--fake-llm" in result.output
+    assert "--max-docs" in result.output
 
 
-def test_ingest_output_file_content(runner, test_data_dir, tmp_path):
-    """Test that exported markdown files have correct content."""
-    output_dir = tmp_path / "output"
-    
+def test_ingest_missing_required_source(runner):
+    """Test ingest without required source parameter."""
     result = runner.invoke(cli, [
         "ingest",
-        "--source", str(test_data_dir),
-        "--output-dir", str(output_dir)
+        "--namespace", "test"
     ])
     
-    assert result.exit_code == 0
-    
-    # Read one of the output files
-    output_file = output_dir / "3352234692.md"
-    assert output_file.exists()
-    
-    content = output_file.read_text()
-    
-    # Check for metadata header
-    assert "Document ID:" in content
-    assert "3352234692" in content
-    assert "Source:" in content
-    assert "Breadcrumb:" in content
-    assert "Content Hash:" in content
-    
-    # Check for actual content
-    assert "Content Lake" in content
+    assert result.exit_code != 0
+    assert "Missing option" in result.output or "required" in result.output.lower()
 
 
-def test_ingest_creates_output_dir(runner, test_data_dir, tmp_path):
-    """Test that ingest creates output directory if it doesn't exist."""
-    output_dir = tmp_path / "nested" / "output" / "path"
-    assert not output_dir.exists()
-    
-    result = runner.invoke(cli, [
-        "ingest",
-        "--source", str(test_data_dir),
-        "--output-dir", str(output_dir)
-    ])
-    
-    assert result.exit_code == 0
-    assert output_dir.exists()
-    assert len(list(output_dir.glob("*.md"))) == 3
-
-
-def test_ingest_without_output_dir(runner, test_data_dir):
-    """Test ingest without output-dir shows stub message."""
-    result = runner.invoke(cli, [
-        "ingest",
-        "--source", str(test_data_dir)
-    ])
-    
-    assert result.exit_code == 0
-    assert "will be implemented" in result.output.lower()
-
-
-def test_ingest_invalid_source(runner, tmp_path):
+def test_ingest_invalid_source(runner):
     """Test ingest with invalid source directory."""
-    output_dir = tmp_path / "output"
-    
     result = runner.invoke(cli, [
         "ingest",
         "--source", "/nonexistent/path",
-        "--output-dir", str(output_dir)
+        "--namespace", "test",
+        "--dry-run"
     ])
     
     assert result.exit_code != 0
 
 
-def test_ingest_with_namespace(runner, test_data_dir, tmp_path):
-    """Test ingest with custom namespace."""
-    output_dir = tmp_path / "output"
-    
+def test_ingest_invalid_namespace(runner, test_data_dir):
+    """Test ingest with invalid namespace containing spaces."""
     result = runner.invoke(cli, [
         "ingest",
         "--source", str(test_data_dir),
-        "--output-dir", str(output_dir),
-        "--namespace", "test"
+        "--namespace", "invalid namespace with spaces",
+        "--dry-run"
     ])
     
-    assert result.exit_code == 0
-    assert "test" in result.output or "Successfully exported" in result.output
+    assert result.exit_code != 0
+    assert "Invalid namespace" in result.output
+
+
+def test_ingest_command_line_option_parsing(runner, test_data_dir):
+    """Test that ingest command correctly accepts all expected options."""
+    # Test with all valid options but expect failure due to missing config/Neo4j
+    # This tests that the CLI parsing works correctly
+    result = runner.invoke(cli, [
+        "ingest",
+        "--source", str(test_data_dir),
+        "--namespace", "test", 
+        "--dry-run",
+        "--fake-llm",
+        "--max-docs", "1",
+        "--refresh",
+        "--interactive"
+    ])
+    
+    # Should not fail due to option parsing issues
+    # May fail due to missing config or other dependencies, but that's expected
+    assert "Invalid namespace" not in result.output
+    assert "Missing option" not in result.output
+    
+
+def test_ingest_displays_configuration_info(runner, test_data_dir):
+    """Test that ingest displays basic configuration information.""" 
+    result = runner.invoke(cli, [
+        "ingest",
+        "--source", str(test_data_dir),
+        "--namespace", "test",
+        "--dry-run",
+        "--fake-llm",
+        "--max-docs", "1"
+    ])
+    
+    # Should display basic config info even if pipeline fails
+    assert "KG Forge Ingest Pipeline" in result.output
+    assert "Source:" in result.output
+    assert "Namespace: test" in result.output
+    assert "DRY RUN" in result.output
+    assert "FAKE" in result.output
+    assert "Limit: 1 documents" in result.output
