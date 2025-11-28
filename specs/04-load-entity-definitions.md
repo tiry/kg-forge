@@ -1,14 +1,14 @@
-# Step 3: Load Entity Definitions
+# Step 4: Load Entity Definitions
 
 **Status**: Not Started  
 **Created**: 2025-11-27  
-**Related to**: Step 3 - Entity Type Loading and Prompt Assembly
+**Related to**: Step 4 - Entity Type Loading and Prompt Assembly
 
 ## Overview
 
-Step 3 implements the ontology loading system that reads entity type definitions from `entities_extract/*.md` files and assembles them into LLM-ready extraction prompts. This step provides a robust foundation for ontology-driven entity extraction by parsing markdown-based entity definitions and merging them with prompt templates using placeholder replacement.
+Step 4 implements the ontology loading system that reads entity type definitions from `entities_extract/*.md` files and assembles them into LLM-ready extraction prompts. This step provides a robust foundation for ontology-driven entity extraction by parsing markdown-based entity definitions and merging them with prompt templates using placeholder replacement.
 
-Step 3 builds the bridge between the curated document content from Step 2 and the LLM-based entity extraction that will come in Step 5. It focuses purely on loading, parsing, and prompt assembly without performing any actual entity extraction, graph operations, or external service calls.
+Step 4 builds the bridge between the curated document content from Step 3 and the LLM-based entity extraction that will come in Step 6. It focuses purely on loading, parsing, and prompt assembly without performing any actual entity extraction, graph operations, or external service calls.
 
 Step 3 explicitly does NOT:
 - Call any LLMs or connect to Bedrock

@@ -14,6 +14,7 @@ from kg_forge.graph.exceptions import Neo4jConnectionError as GraphConnectionErr
 from kg_forge.render.graph_query import GraphQuery, SeedConfig
 from kg_forge.render.html_builder import HtmlBuilder
 from kg_forge.utils.logging import get_logger
+from kg_forge.ontology_manager import get_ontology_manager
 
 console = Console()
 logger = get_logger(__name__)
@@ -131,7 +132,18 @@ def render(
         # Initialize components
         neo4j_client = Neo4jClient(settings)
         graph_query = GraphQuery(neo4j_client)
-        html_builder = HtmlBuilder()
+        
+        # Get ontology-aware styling
+        ontology_manager = get_ontology_manager()
+        if settings.app.ontology_pack:
+            try:
+                ontology_manager.set_active_ontology(settings.app.ontology_pack)
+            except Exception as e:
+                logger.warning(f"Failed to activate ontology pack '{settings.app.ontology_pack}': {e}")
+        
+        active_pack = ontology_manager.get_active_ontology()
+        ontology_id = active_pack.info.id if active_pack else None
+        html_builder = HtmlBuilder(ontology_id=ontology_id)
         
         # Test Neo4j connection
         console.print("Testing Neo4j connection...")
@@ -162,7 +174,10 @@ def render(
                 exclude_types=exclude_type_list
             )
         
-        if graph_data.is_empty:
+        # Debug: Check graph data status
+        # print(f"DEBUG: GraphData nodes={len(graph_data.nodes)}, rels={len(graph_data.relationships)}, is_empty={graph_data.is_empty()}")
+        
+        if graph_data.is_empty():
             console.print(f"[yellow]⚠[/yellow] No graph data found for namespace '{target_namespace}'")
             console.print("Make sure you have ingested content with [bold]kg-forge ingest[/bold]")
             # Still generate empty visualization

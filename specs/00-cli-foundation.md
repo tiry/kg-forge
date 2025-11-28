@@ -1,4 +1,4 @@
-# Step 1: CLI Foundation
+# Step 0: CLI Foundation
 
 ## Overview
 

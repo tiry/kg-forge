@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/tiry/kg-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/tiry/kg-forge/actions/workflows/ci.yml)
 ![Coverage](https://raw.githubusercontent.com/tiry/kg-forge/badges/.github/coverage.svg)
-![Tests](https://img.shields.io/badge/tests-269%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-271%20passed-brightgreen)
 ![Production Ready](https://img.shields.io/badge/status-production%20ready-success)
 
 **Production-ready CLI tool for extracting entities from HTML content and building knowledge graphs using LLM-powered entity extraction and Neo4j storage.**
@@ -13,7 +13,8 @@
 🧠 **AI-Powered Extraction**: Fully functional AWS Bedrock integration with robust error handling and retry logic  
 📊 **Real Neo4j Integration**: All query commands now return live data from your knowledge graph
 🎨 **Interactive Visualizations**: Professional graph rendering with filtering, seeding, and exploration features
-✅ **100% Test Coverage**: 269/269 tests passing - comprehensive validation of all functionality
+🎯 **NEW: Ontology Visualization**: Interactive Cytoscape.js-powered ontology structure visualization with multiple layouts
+✅ **100% Test Coverage**: 277/277 tests passing - comprehensive validation of all functionality
 
 ## Description
 
@@ -40,6 +41,7 @@ kg_forge/
 │   │   ├── parse.py        # Parse command
 │   │   ├── query.py        # Query command
 │   │   ├── render.py       # Render command
+│   │   ├── render_ontology.py # Ontology visualization command
 │   │   └── neo4j_ops.py    # Neo4j operations
 │   ├── ingest/             # Ingest pipeline (Step 6)
 │   │   ├── __init__.py
@@ -57,6 +59,11 @@ kg_forge/
 │   │   ├── __init__.py
 │   │   ├── models.py       # Entity data models
 │   │   └── definitions.py  # Entity definition loader
+│   ├── ontology/           # Ontology pack management (NEW!)
+│   │   ├── __init__.py
+│   │   ├── base.py         # Base classes and interfaces
+│   │   └── filesystem_pack.py # Filesystem-based ontology packs
+│   ├── ontology_manager.py # Central ontology management
 │   ├── graph/              # Graph database operations
 │   │   ├── __init__.py
 │   │   ├── neo4j_client.py # Neo4j client and connection management
@@ -82,15 +89,16 @@ kg_forge/
 │   │   ├── graph_query.py  # Neo4j subgraph querying and filtering
 │   │   ├── style_config.py # Visual styling configuration
 │   │   ├── html_builder.py # HTML template rendering
+│   │   ├── ontology_visualizer.py # Ontology structure visualization with Cytoscape.js
 │   │   └── templates/      # HTML templates for visualization
 │   └── utils/              # Utilities
 │       ├── __init__.py
 │       ├── logging.py      # Logging setup
 │       ├── hashing.py      # Content hashing for idempotency
 │       └── interactive.py  # Interactive CLI utilities
-├── tests/                  # Comprehensive test suite (269 tests passing)
+├── tests/                  # Comprehensive test suite (277 tests passing)
 │   ├── __init__.py
-│   ├── test_cli/           # CLI tests (23 tests)
+│   ├── test_cli/           # CLI tests (29 tests - includes 6 ontology visualization tests)
 │   ├── test_config/        # Config tests (7 tests)
 │   ├── test_entities/      # Entity management tests (24 tests)
 │   ├── test_graph/         # Graph operations tests (38 tests)
@@ -98,7 +106,18 @@ kg_forge/
 │   ├── test_llm/           # LLM integration tests (36 tests)
 │   ├── test_parsers/       # Parser tests (16 tests)
 │   └── test_render/        # Graph rendering tests (57 tests)
-├── entities_extract/       # Entity definitions
+├── ontology_packs/         # Pluggable ontology packs (NEW!)
+│   └── ai_ml_confluence/   # AI/ML domain ontology pack
+│       ├── pack.yaml       # Pack metadata and configuration
+│       └── entities/       # Entity type definitions
+│           ├── product.md          # Product entity definition
+│           ├── component.md        # Component entity definition
+│           ├── workstream.md       # Workstream entity definition
+│           ├── technology.md       # Technology entity definition
+│           ├── engineering_team.md # Engineering team entity definition
+│           ├── ai_ml_domain.md     # AI/ML domain entity definition
+│           └── prompt_template.md  # LLM extraction template
+├── entities_extract/       # Legacy entity definitions (deprecated)
 │   ├── product.md          # Product entity definition
 │   ├── component.md        # Component entity definition
 │   ├── workstream.md       # Workstream entity definition
@@ -107,8 +126,18 @@ kg_forge/
 │   ├── ai_ml_domain.md     # AI/ML domain entity definition
 │   └── prompt_template.md  # Prompt template for entity extraction
 ├── specs/                  # Specification documents
-│   ├── seed.md             # Initial specification
-│   └── 01-cli-foundation.md # CLI foundation spec
+│   ├── seed_product.md     # Product specification and vision
+│   ├── seed_architect.ure.md # Architecture specification
+│   ├── 00-cli-foundation.md # CLI foundation spec (Step 0)
+│   ├── 01-ontology-management.md # Ontology management spec (Step 1)
+│   ├── 02-ontology-visualization.md # Ontology visualization spec (Step 2)
+│   ├── 03-html-parsing-and-document-model.md # HTML parsing specification (Step 3)
+│   ├── 04-load-entity-definitions.md # Entity definition loading spec (Step 4)
+│   ├── 05-neo4j-bootstrap.md # Neo4j integration specification (Step 5)
+│   ├── 06-llm-integration-and-extractor.md # LLM integration spec (Step 6)
+│   ├── 07-ingest-pipeline.md # Complete ingest pipeline spec (Step 7)
+│   ├── 08-graph-rendering-and-exploration.md # Graph visualization spec (Step 8)
+│   └── 09-kg-manipulation-and-dedup.md # Knowledge graph manipulation spec (Step 9)
 ├── requirements.txt        # Project dependencies
 ├── setup.py               # Package setup file
 ├── .env.example           # Example environment variables
@@ -121,12 +150,14 @@ kg_forge/
 🚀 **Production-Ready Ingest Pipeline**: Complete HTML-to-knowledge-graph workflow with 18+ entities extracted per document  
 🧠 **LLM-Powered Entity Extraction**: AWS Bedrock integration (Claude 3 Haiku) with smart JSON parsing and retry logic  
 📊 **Neo4j Knowledge Graph**: Live data queries, robust schema management, and real-time graph operations  
+🎯 **Pluggable Ontology Packs**: Domain-specific entity definitions (AI/ML, software, business) with easy switching  
 🔄 **Extensible Hook System**: Customize processing with before_store and after_batch hooks  
 📈 **Comprehensive Metrics**: Track performance, success rates, and processing statistics  
 🛡️ **Error Resilience**: Robust error handling with retry logic and detailed failure reporting  
 ⚡ **Idempotent Processing**: Content hash-based change detection for efficient re-runs  
-🧪 **Testing-First Design**: 269 tests covering all components (100% pass rate)  
-🎨 **Interactive Graph Visualization**: Professional neovis.js-based rendering with filtering and exploration  
+🧪 **Testing-First Design**: 277 tests covering all components (100% pass rate)  
+🎨 **Interactive Graph Visualization**: Professional vis.js-based rendering with filtering and exploration  
+🎭 **Interactive Ontology Visualization**: Cytoscape.js-powered ontology structure visualization with multiple layouts  
 🔍 **Real-Time Querying**: Live Neo4j queries for entities, documents, and relationships  
 
 ## Quick Start
@@ -145,17 +176,20 @@ kg-forge neo4j start --detach
 # 3. Initialize database schema
 kg-forge neo4j init-schema
 
-# 4. Test entity extraction (no API calls needed)
+# 4. Discover available ontology packs
+kg-forge ontology list
+
+# 5. Test entity extraction (no API calls needed)
 kg-forge llm-test test_data/Content-Lake_3352431259.html --fake-llm
 
-# 5. Run complete pipeline on test data
+# 6. Run complete pipeline on test data
 kg-forge ingest --source test_data/ --namespace demo --fake-llm
 
-# 6. Query your knowledge graph
+# 7. Query your knowledge graph
 kg-forge query --namespace demo list-types
 kg-forge query --namespace demo list-entities --type technology
 
-# 7. Generate interactive visualization
+# 8. Generate interactive visualization
 kg-forge render --namespace demo --out demo_graph.html
 # Open demo_graph.html in your browser to explore!
 ```
@@ -363,6 +397,99 @@ kg-forge render \
   --out platform_analysis.html
 ```
 
+#### Render Ontology Visualization
+
+Generate interactive HTML visualizations of your ontology structure showing entity types and their relationships using Cytoscape.js:
+
+```bash
+# Basic ontology visualization with default settings
+kg-forge render-ontology
+
+# Custom output file and layout
+kg-forge render-ontology --out my_ontology.html --layout hierarchical
+
+# Use specific ontology pack
+kg-forge render-ontology --ontology-pack ai_ml_confluence --out ai_ontology.html
+
+# Include entity examples as nodes in the visualization
+kg-forge render-ontology --include-examples --out detailed_ontology.html
+
+# Dark theme visualization
+kg-forge render-ontology --theme dark --out dark_ontology.html
+
+# Circular layout with examples
+kg-forge render-ontology \
+  --layout circular \
+  --include-examples \
+  --theme dark \
+  --out circular_ontology.html
+
+# Grid layout for structured view
+kg-forge render-ontology --layout grid --out structured_ontology.html
+
+# Force-directed layout (good for exploring relationships)
+kg-forge render-ontology --layout force-directed --out relationship_ontology.html
+
+# Complete ontology visualization for documentation
+kg-forge render-ontology \
+  --ontology-pack ai_ml_confluence \
+  --layout hierarchical \
+  --include-examples \
+  --theme light \
+  --out complete_ai_ontology.html
+```
+
+Available layout options:
+- `force-directed`: Physics-based layout showing natural clustering (default)
+- `hierarchical`: Top-down tree structure using relationships  
+- `circular`: Nodes arranged in a circle
+- `grid`: Regular grid arrangement
+
+Available themes:
+- `light`: Light theme with blue/purple colors (default)
+- `dark`: Dark theme suitable for dark environments
+
+#### Ontology Pack Management
+
+```bash
+# List all available ontology packs
+kg-forge ontology list
+
+# List ontology packs in JSON format
+kg-forge ontology list --format json
+
+# Activate a specific ontology pack
+kg-forge ontology activate ai_ml_confluence
+
+# Show detailed information about active ontology pack
+kg-forge ontology info
+
+# Show information about specific ontology pack
+kg-forge ontology info ai_ml_confluence
+
+# Get ontology info in JSON format
+kg-forge ontology info ai_ml_confluence --format json
+
+# Validate ontology pack structure and configuration
+kg-forge ontology validate
+
+# Validate specific ontology pack
+kg-forge ontology validate ai_ml_confluence
+
+# Discover ontology packs from default directory
+kg-forge ontology discover
+
+# Discover ontology packs from custom directory
+kg-forge ontology discover --directory /path/to/custom/ontology/packs
+
+# Example workflow: Switch between different domains
+kg-forge ontology activate ai_ml_confluence
+kg-forge ingest --source ai_docs/ --namespace ai --fake-llm
+
+kg-forge ontology activate software_engineering  
+kg-forge ingest --source code_docs/ --namespace dev --fake-llm
+```
+
 #### Neo4j Operations
 
 ```bash
@@ -413,11 +540,20 @@ NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=password
 
-# AWS Bedrock Configuration
-AWS_ACCESS_KEY_ID=your_access_key_here
-AWS_SECRET_ACCESS_KEY=your_secret_key_here
-AWS_SESSION_TOKEN=your_session_token_here  # Optional, for temporary credentials
+# AWS Bedrock Configuration - Choose your preferred method:
+
+# Option 1: AWS Profile (Recommended)
+AWS_PROFILE=default
 AWS_DEFAULT_REGION=us-east-1
+
+# Option 2: Explicit Credentials (if needed)
+# AWS_ACCESS_KEY_ID=your_access_key_here
+# AWS_SECRET_ACCESS_KEY=your_secret_key_here
+# AWS_SESSION_TOKEN=your_session_token_here  # Optional, for temporary credentials
+
+# Option 3: Use IAM roles, SSO, or environment - no configuration needed
+
+# Bedrock Model Configuration
 BEDROCK_MODEL_NAME=anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_MAX_TOKENS=4096
 BEDROCK_TEMPERATURE=0.1
@@ -426,6 +562,9 @@ BEDROCK_TEMPERATURE=0.1
 LOG_LEVEL=INFO
 DEFAULT_NAMESPACE=default
 ENTITIES_EXTRACT_DIR=entities_extract
+# Ontology pack configuration
+ONTOLOGY_PACK=ai_ml_confluence
+ONTOLOGY_PACKS_DIR=ontology_packs
 ```
 
 #### Example YAML Configuration
@@ -438,12 +577,18 @@ neo4j:
   password: password
   database: neo4j
 
-# AWS Bedrock Configuration
+# AWS Bedrock Configuration - Choose your preferred method:
 aws:
-  access_key_id: your_access_key_here
-  secret_access_key: your_secret_key_here
-  session_token: your_session_token_here  # Optional, for temporary credentials
+  # Option 1: AWS Profile (Recommended)
+  profile_name: default
   default_region: us-east-1
+  
+  # Option 2: Explicit Credentials (if needed)
+  # access_key_id: your_access_key_here
+  # secret_access_key: your_secret_key_here
+  # session_token: your_session_token_here  # Optional, for temporary credentials
+  
+  # Bedrock Model Configuration
   bedrock_model_name: anthropic.claude-3-haiku-20240307-v1:0
   bedrock_max_tokens: 4096
   bedrock_temperature: 0.1
@@ -453,6 +598,9 @@ app:
   log_level: INFO
   default_namespace: default
   entities_extract_dir: entities_extract
+  # Ontology pack configuration
+  ontology_pack: ai_ml_confluence
+  ontology_packs_dir: ontology_packs
 ```
 
 ## Development
@@ -460,7 +608,7 @@ app:
 ### Running Tests
 
 ```bash
-# Run all tests (should show 269 passed, 1 skipped)
+# Run all tests (should show 271 passed, 1 skipped)
 pytest
 
 # Run with coverage report
@@ -481,12 +629,19 @@ pytest tests/test_llm/ -v
 3. **Python Environment**: 3.8+ with proper dependency management
 
 #### Production Configuration
+
+**AWS Authentication**: KG Forge supports multiple AWS authentication methods. See [`docs/AWS_AUTHENTICATION.md`](docs/AWS_AUTHENTICATION.md) for detailed setup guides covering AWS SSO, profiles, environment variables, and IAM roles.
+
 ```bash
 # Set up production environment
 export NEO4J_URI=bolt://your-neo4j-server:7687
 export NEO4J_USERNAME=neo4j
 export NEO4J_PASSWORD=your-secure-password
-export AWS_ACCESS_KEY_ID=your-aws-key
+
+# AWS credentials (choose your preferred method)
+export AWS_PROFILE=production              # Option 1: Use AWS profile
+# OR
+export AWS_ACCESS_KEY_ID=your-aws-key      # Option 2: Explicit credentials
 export AWS_SECRET_ACCESS_KEY=your-aws-secret
 export AWS_DEFAULT_REGION=us-east-1
 export BEDROCK_MODEL_NAME=anthropic.claude-3-haiku-20240307-v1:0
@@ -503,12 +658,31 @@ kg-forge render --namespace production --depth 3 --max-nodes 500 --out productio
 
 ### Project Status
 
-**This project is production-ready for Steps 1-7.** All core features are implemented and validated with comprehensive test coverage (270/270 tests passing - 100% pass rate):
+**This project is production-ready for Steps 0-7.** All core features are implemented and validated with comprehensive test coverage (277/277 tests passing - 100% pass rate):
 
-### ✅ **Core Infrastructure (Steps 1-2)**
+### ✅ **CLI Foundation (Step 0)**
 - [x] CLI command structure with comprehensive help and validation
 - [x] Configuration management with environment variables and YAML
 - [x] Logging setup with configurable levels
+
+### ✅ **Ontology Management (Step 1)** 🎉 **COMPLETED**
+- [x] **Ontology pack system**: Organize entity definitions into reusable packs
+- [x] **Dynamic loading**: Load and activate ontology packs at runtime
+- [x] **Validation framework**: Validate ontology definitions and relationships
+- [x] **CLI ontology commands**: Inspect, validate, and manage ontology packs
+- [x] **Extensible architecture**: Support for custom ontology formats and extensions
+
+### ✅ **Ontology Visualization (Step 2)** 🎉 **COMPLETED**
+- [x] **Interactive ontology structure visualization**: Cytoscape.js-powered visualization of entity types and relationships
+- [x] **Multiple layout algorithms**: Force-directed, hierarchical, circular, and grid layouts for different exploration needs
+- [x] **Theme support**: Light and dark themes for different viewing environments
+- [x] **Entity examples integration**: Include entity examples as additional nodes in the visualization
+- [x] **CLI render-ontology command**: Complete interface with layout, theme, and example options
+- [x] **Self-contained HTML output**: No external dependencies, works offline
+- [x] **Production features**: Rich tooltips, interactive controls, and professional styling
+- [x] **Complete test coverage**: 6/6 ontology visualization tests passing (100% pass rate)
+
+### ✅ **Data Curation (Step 3)**
 - [x] HTML parsing and content curation
   - [x] Parse Confluence HTML exports
   - [x] Convert HTML to Markdown
@@ -516,21 +690,21 @@ kg-forge render --namespace production --depth 3 --max-nodes 500 --out productio
   - [x] Generate content hashes for change detection
   - [x] LlamaIndex-compatible document models
 
-### ✅ **Entity Management (Step 3)**
+### ✅ **Entity Management (Step 4)**
 - [x] Entity definition loading and management
   - [x] Load entity definitions from markdown files
   - [x] Parse relations, examples, and descriptions
   - [x] CLI commands for inspection and validation
   - [x] Prompt template merging for LLM integration
 
-### ✅ **Graph Database (Step 4)**
+### ✅ **Graph Database (Step 5)**
 - [x] Neo4j client with connection management
 - [x] Schema management (constraints and indexes)
 - [x] Database operations (clear, query execution)
 - [x] Docker container management for Neo4j
 - [x] Complete CLI commands for Neo4j operations
 
-### ✅ **LLM Integration (Step 5)**
+### ✅ **LLM Integration (Step 6)**
 - [x] Protocol-based LLM extractor architecture
 - [x] AWS Bedrock integration via LlamaIndex
 - [x] Fake LLM implementation for testing and development
@@ -539,7 +713,7 @@ kg-forge render --namespace production --depth 3 --max-nodes 500 --out productio
 - [x] Comprehensive error handling and retry logic
 - [x] CLI command for testing entity extraction (`llm-test`)
 
-### ✅ **Complete Ingest Pipeline (Step 6)** 🎉 **COMPLETED**
+### ✅ **Complete Ingest Pipeline (Step 7)** 🎉 **COMPLETED**
 - [x] **End-to-end orchestration**: HTML → LLM extraction → Neo4j storage
 - [x] **File system discovery**: Recursive HTML file discovery with content hashing
 - [x] **Metrics collection**: Comprehensive statistics and performance tracking
@@ -551,7 +725,7 @@ kg-forge render --namespace production --depth 3 --max-nodes 500 --out productio
 - [x] **Production features**: Namespace support, document limits, refresh modes
 
 ### 📊 **Comprehensive Test Coverage**
-- [x] **269 tests** covering all components (100% pass rate across all features)
+- [x] **277 tests** covering all components (100% pass rate across all features)
 - [x] **Integration tests** validating end-to-end pipeline functionality  
 - [x] **Unit tests** for all core modules and edge cases
 - [x] **CLI tests** ensuring proper command parsing and validation
@@ -569,13 +743,24 @@ kg-forge render --namespace production --depth 3 --max-nodes 500 --out productio
 - [x] **Production features**: Node limits, connectivity preservation, styling
 - [x] **Complete test coverage**: 57/57 render tests passing (100% pass rate)
 
-### 📊 **Quality Assurance**
-- [x] **269 comprehensive tests** (100% pass rate across all features)
+### ✅ **Ontology Visualization (NEW!)** 🎉 **COMPLETED**
+- [x] **Interactive ontology structure visualization**: Cytoscape.js-powered visualization of entity types and relationships
+- [x] **Multiple layout algorithms**: Force-directed, hierarchical, circular, and grid layouts for different exploration needs
+- [x] **Theme support**: Light and dark themes for different viewing environments
+- [x] **Entity examples integration**: Include entity examples as additional nodes in the visualization
+- [x] **CLI render-ontology command**: Complete interface with layout, theme, and example options
+- [x] **Self-contained HTML output**: No external dependencies, works offline
+- [x] **Production features**: Rich tooltips, interactive controls, and professional styling
+- [x] **Complete test coverage**: 6/6 ontology visualization tests passing (100% pass rate)
+
+### 📈 **Quality Assurance**
+- [x] **271 comprehensive tests** (100% pass rate across all features)
 - [x] **End-to-end validation** of complete HTML→LLM extraction→Neo4j storage→visualization pipeline
 - [x] **Production-ready** with robust error handling, retry logic, and user feedback
 - [x] **Real data validation** with successful extraction of 18+ entities from test documents
 - [x] **Live Neo4j integration** with confirmed queries returning actual graph data
 - [x] **AWS Bedrock integration** validated with anthropic.claude-3-haiku-20240307-v1:0 model
+- [x] **Ontology visualization** with Cytoscape.js generating interactive HTML files
 
 ### 🚧 **Upcoming Features (Step 8)**
 - [ ] Knowledge graph manipulation and deduplication (Step 8)

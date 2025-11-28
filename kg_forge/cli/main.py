@@ -11,6 +11,7 @@ from kg_forge.cli.ingest import ingest
 from kg_forge.cli.parse import parse_html
 from kg_forge.cli.query import query
 from kg_forge.cli.render import render
+from kg_forge.cli.render_ontology import render_ontology
 
 from kg_forge.cli.entities import entities
 
@@ -70,6 +71,7 @@ cli.add_command(ingest)
 cli.add_command(parse_html)
 cli.add_command(query)
 cli.add_command(render)
+cli.add_command(render_ontology)
 cli.add_command(entities)
 
 # Import and add the neo4j group from updated neo4j_ops.py
@@ -79,6 +81,10 @@ cli.add_command(neo4j)
 # Import and add the llm-test command
 from kg_forge.cli.llm_test import llm_test
 cli.add_command(llm_test)
+
+# Import and add ontology management commands
+from kg_forge.cli.ontology import ontology
+cli.add_command(ontology)
 
 
 def main() -> None:

@@ -81,6 +81,15 @@ def test_render_help():
     assert "Render knowledge graph visualization" in result.output
 
 
+def test_render_ontology_help():
+    """Test render-ontology command help."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ['render-ontology', '--help'])
+    
+    assert result.exit_code == 0
+    assert "Render ontology visualization" in result.output
+
+
 def test_neo4j_start_help():
     """Test neo4j start command help."""
     runner = CliRunner()

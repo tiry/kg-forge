@@ -1,8 +1,8 @@
-# Step 6: Ingest Pipeline
+# Step 7: Ingest Pipeline
 
 ## Overview
 
-Step 6 implements the end-to-end ingest pipeline that orchestrates all previous components into a complete workflow. The pipeline discovers HTML files under a source folder, runs curation to produce canonical documents (Step 2), uses the LLM extraction pipeline (Step 5) with entity definitions and templates (Step 3), and writes `:Doc` and `:Entity` nodes and relationships into Neo4j according to the schema (Step 4). This is the first step that runs a full path from filesystem → LLM → graph, focusing on correctness, idempotency, and hooks integration (`process_before_store`, `process_after_batch`). Step 6 does NOT handle graph visualization (that's Step 7) and does NOT implement complex dedup/merge strategies beyond the simple merge keys defined in Step 4.
+Step 7 implements the end-to-end ingest pipeline that orchestrates all previous components into a complete workflow. The pipeline discovers HTML files under a source folder, runs curation to produce canonical documents (Step 3), uses the LLM extraction pipeline (Step 6) with entity definitions and templates (Step 4), and writes `:Doc` and `:Entity` nodes and relationships into Neo4j according to the schema (Step 5). This is the first step that runs a full path from filesystem → LLM → graph, focusing on correctness, idempotency, and hooks integration (`process_before_store`, `process_after_batch`). Step 7 does NOT handle graph visualization (that's Step 8) and does NOT implement complex dedup/merge strategies beyond the simple merge keys defined in Step 5.
 
 ## Scope
 

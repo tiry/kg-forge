@@ -1,10 +1,10 @@
-# Step 5: LLM Integration & Entity Extraction
+# Step 6: LLM Integration & Entity Extraction
 
 ## Overview
 
-Step 5 introduces a pluggable LLM-based extraction engine that builds prompts using curated documents (from Step 2) and entity definition templates (from Step 3), calls AWS Bedrock (or a generic LLM client abstraction), and parses the response into a structured `{"entities": [...]}` payload suitable for ingestion into the Knowledge Graph. This step provides the core extraction capability that will be orchestrated by the ingest pipeline in Step 6.
+Step 6 introduces a pluggable LLM-based extraction engine that builds prompts using curated documents (from Step 3) and entity definition templates (from Step 4), calls AWS Bedrock (or a generic LLM client abstraction), and parses the response into a structured `{"entities": [...]}` payload suitable for ingestion into the Knowledge Graph. This step provides the core extraction capability that will be orchestrated by the ingest pipeline in Step 7.
 
-Step 5 explicitly does NOT write anything to Neo4j (no graph persistence yet), orchestrate the full ingest pipeline over folders (that's Step 6), perform dedup/merge/pruning of entities, or handle visualization or rendering.
+Step 6 explicitly does NOT write anything to Neo4j (no graph persistence yet), orchestrate the full ingest pipeline over folders (that's Step 7), perform dedup/merge/pruning of entities, or handle visualization or rendering.
 
 ## Scope
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KG Forge - Graph Visualization{% if namespace %} ({{ namespace }}){% endif %}</title>
-    <script src="https://unpkg.com/neovis.js@2.0.2"></script>
+    <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -154,8 +154,17 @@
         // Embedded graph data
         const graphData = {{ graph_data_json|safe }};
         
-        // neovis.js configuration
-        const config = {{ neovis_config_json|safe }};
+        // Color mapping for different node types
+        const colors = {
+            doc: '#1f77b4',
+            product: '#2ca02c',
+            engineering_team: '#ff7f0e',
+            technology: '#9467bd',
+            component: '#8c564b',
+            workstream: '#e377c2',
+            ai_ml_domain: '#7f7f7f',
+            default: '#d62728'
+        };
         
         // Initialize visualization
         function initVisualization() {
@@ -163,35 +172,107 @@
                 // Hide loading indicator
                 document.getElementById('loading').style.display = 'none';
                 
-                // Create neovis instance with embedded data
-                const viz = new NeoVis.default(config);
-                
-                // Load the embedded data directly
-                viz._data = {
-                    nodes: graphData.nodes.map(node => ({
+                // Convert graph data to vis.js format
+                const nodes = new vis.DataSet(graphData.nodes.map(node => {
+                    const isDoc = node.labels.includes('Doc');
+                    const entityType = node.properties.entity_type || 'default';
+                    
+                    return {
                         id: node.id,
-                        labels: node.labels,
-                        properties: node.properties
-                    })),
-                    relationships: graphData.relationships.map(rel => ({
-                        id: rel.id,
-                        startNodeId: rel.start_node,
-                        endNodeId: rel.end_node,
-                        type: rel.type,
-                        properties: rel.properties
-                    }))
+                        label: isDoc ? 
+                            (node.properties.title || node.properties.doc_id || 'Document') :
+                            (node.properties.name || 'Entity'),
+                        color: {
+                            background: isDoc ? colors.doc : (colors[entityType] || colors.default),
+                            border: isDoc ? '#0f5a8a' : '#333333'
+                        },
+                        shape: isDoc ? 'box' : 'dot',
+                        size: isDoc ? 25 : 20,
+                        font: {
+                            color: isDoc ? 'white' : 'black',
+                            size: isDoc ? 14 : 12
+                        },
+                        title: generateTooltip(node),
+                        group: isDoc ? 'document' : entityType
+                    };
+                }));
+                
+                const edges = new vis.DataSet(graphData.relationships.map(rel => ({
+                    id: rel.id,
+                    from: rel.start_node,
+                    to: rel.end_node,
+                    label: rel.type === 'MENTIONS' ? '' : rel.type.replace('_', ' '),
+                    color: rel.type === 'MENTIONS' ? '#cccccc' : '#666666',
+                    width: rel.type === 'MENTIONS' ? 1 : 2,
+                    arrows: 'to',
+                    dashes: rel.type === 'USES',
+                    title: `${rel.type}${rel.properties.confidence ? ' (confidence: ' + rel.properties.confidence + ')' : ''}`
+                })));
+                
+                // Create network
+                const container = document.getElementById('viz');
+                const data = { nodes: nodes, edges: edges };
+                const options = {
+                    nodes: {
+                        borderWidth: 2,
+                        shadow: true,
+                        chosen: true
+                    },
+                    edges: {
+                        shadow: true,
+                        smooth: {
+                            enabled: true,
+                            type: 'dynamic'
+                        }
+                    },
+                    physics: {
+                        enabled: true,
+                        stabilization: {
+                            iterations: 100
+                        },
+                        barnesHut: {
+                            gravitationalConstant: -8000,
+                            centralGravity: 0.3,
+                            springLength: 95,
+                            springConstant: 0.04,
+                            damping: 0.09
+                        }
+                    },
+                    interaction: {
+                        hover: true,
+                        tooltipDelay: 200,
+                        hideEdgesOnDrag: true,
+                        hideNodesOnDrag: false
+                    },
+                    layout: {
+                        improvedLayout: true
+                    }
                 };
                 
-                // Render the visualization
-                viz.render();
+                const network = new vis.Network(container, data, options);
                 
                 // Add interaction handlers
-                viz.registerOnEvent("clickNode", function(event) {
-                    console.log("Clicked node:", event);
+                network.on("click", function(params) {
+                    if (params.nodes.length > 0) {
+                        const nodeId = params.nodes[0];
+                        const node = graphData.nodes.find(n => n.id === nodeId);
+                        console.log("Clicked node:", node);
+                        showNodeDetails(node);
+                    }
+                    if (params.edges.length > 0) {
+                        const edgeId = params.edges[0];
+                        const edge = graphData.relationships.find(r => r.id === edgeId);
+                        console.log("Clicked relationship:", edge);
+                    }
                 });
                 
-                viz.registerOnEvent("clickRelationship", function(event) {
-                    console.log("Clicked relationship:", event);
+                network.on("hoverNode", function(params) {
+                    // Optional: Add hover effects
+                });
+                
+                // Fit network after stabilization
+                network.once("stabilizationIterationsDone", function() {
+                    network.fit();
                 });
                 
             } catch (error) {
@@ -201,21 +282,41 @@
             }
         }
         
+        // Generate tooltip content for nodes
+        function generateTooltip(node) {
+            const isDoc = node.labels.includes('Doc');
+            let tooltip = '';
+            
+            if (isDoc) {
+                tooltip = `<strong>Document</strong><br/>`;
+                tooltip += `ID: ${node.properties.doc_id || 'Unknown'}<br/>`;
+                tooltip += `Title: ${node.properties.title || 'Unknown'}<br/>`;
+                tooltip += `Namespace: ${node.properties.namespace || 'Unknown'}`;
+            } else {
+                tooltip = `<strong>Entity</strong><br/>`;
+                tooltip += `Name: ${node.properties.name || 'Unknown'}<br/>`;
+                tooltip += `Type: ${node.properties.entity_type || 'Unknown'}<br/>`;
+                tooltip += `Confidence: ${node.properties.confidence || 'N/A'}<br/>`;
+                tooltip += `Namespace: ${node.properties.namespace || 'Unknown'}`;
+            }
+            
+            return tooltip;
+        }
+        
+        // Show detailed information about a node
+        function showNodeDetails(node) {
+            const details = generateTooltip(node);
+            // You could show this in a modal or sidebar
+            // For now, just log to console
+            console.log("Node details:", details);
+        }
+        
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', initVisualization);
         
-        // Handle window resize
-        window.addEventListener('resize', function() {
-            const viz = document.querySelector('#viz canvas');
-            if (viz && viz._neovis) {
-                viz._neovis.render();
-            }
-        });
-        
         // Debug information
         console.log("Graph Data:", graphData);
-        console.log("Neovis Config:", config);
-        console.log("KG Forge Graph Visualization Loaded");
+        console.log("KG Forge Graph Visualization Loaded with vis.js");
     </script>
     {% endif %}
 </body>

@@ -1,8 +1,8 @@
-# Step 8: KG Manipulation & Deduplication (Human-in-the-Loop)
+# Step 9: KG Manipulation & Deduplication (Human-in-the-Loop)
 
 ## Overview
 
-Step 8 provides a repeatable, human-in-the-loop framework for detecting likely duplicate or related entities in the Knowledge Graph, allowing users to review and confirm merges/alias relationships, and keeping the graph clean and meaningful as ingest runs accumulate more content. This step builds on top of the existing ingest + schema (Steps 2–6) and uses hooks and/or dedicated commands for KG maintenance. Step 8 does NOT change the basic ontology (no new entity types), change ingest semantics for fresh data, or alter the core CLI foundation or rendering semantics.
+Step 9 provides a repeatable, human-in-the-loop framework for detecting likely duplicate or related entities in the Knowledge Graph, allowing users to review and confirm merges/alias relationships, and keeping the graph clean and meaningful as ingest runs accumulate more content. This step builds on top of the existing ingest + schema (Steps 3–7) and uses hooks and/or dedicated commands for KG maintenance. Step 9 does NOT change the basic ontology (no new entity types), change ingest semantics for fresh data, or alter the core CLI foundation or rendering semantics.
 
 ## Scope
 

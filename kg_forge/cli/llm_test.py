@@ -113,6 +113,7 @@ def llm_test(input_file: Path, model: Optional[str], fake_llm: bool, output_form
                     access_key_id=config.aws.access_key_id,
                     secret_access_key=config.aws.secret_access_key,
                     session_token=config.aws.session_token,
+                    profile_name=config.aws.profile_name,
                     max_tokens=config.aws.bedrock_max_tokens,
                     temperature=config.aws.bedrock_temperature
                 )

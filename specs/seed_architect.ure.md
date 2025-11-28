@@ -565,6 +565,7 @@ Top-level command exposes subcommands:
 - ingest
 - query
 - render
+- render-ontology
 - neo4j-start
 - neo4j-stop
 - export-entities
@@ -668,9 +669,33 @@ Behaviour:
 
 - Extract a subgraph from Neo4j (respecting namespace, depth, and node limit).
 - Emit HTML + embedded JS that:
-  - uses neovis.js,
+  - uses vis.js,
   - connects to Neo4j or uses a pre-fetched dataset,
   - visualizes :Doc and :Entity nodes and relationships.
+
+### 8.4.1 render-ontology Command
+
+For rendering ontology structure visualization:
+
+Options:
+
+- --ontology-pack TEXT
+  - ontology pack to visualize (default: active or auto-detected).
+- --out PATH
+  - output HTML file (default: ontology.html).
+- --layout [force-directed|hierarchical|circular|grid]
+  - graph layout algorithm (default: force-directed).
+- --include-examples
+  - include entity examples as additional nodes.
+- --theme [light|dark]
+  - visualization theme (default: light).
+
+Behaviour:
+
+- Load entity definitions from active ontology pack.
+- Build graph data showing entity types and their relationships.
+- Generate self-contained HTML file using Cytoscape.js for visualization.
+- Support interactive exploration with tooltips, zooming, and layout controls.
 
 ### 8.5 Additional Commands
 
@@ -750,13 +775,13 @@ The underlying schema in Neo4j must remain consistent with:
 
 ---
 
-## 11. Implementation Plan (Steps 1–8)
+## 11. Implementation Plan (Steps 0–8)
 
 We decompose the work into steps that allow us to test, verify, and adjust the spec.
 
 Each step will have its own detailed spec (docs/specs/*.md), tests, and code.
 
-### Step 1 – CLI Skeleton
+### Step 0 – CLI Skeleton
 
 - Implement the CLI logic:
   - command parsing,
@@ -767,7 +792,28 @@ Each step will have its own detailed spec (docs/specs/*.md), tests, and code.
 - Add a README.
 - No actual processing or LLM calls yet.
 
-### Step 2 – Data Curation
+### Step 1 – Ontology Management 🎉 **COMPLETED**
+
+- Implement ontology pack system for organizing entity definitions:
+  - Dynamic loading and activation of ontology packs.
+  - Validation framework for ontology definitions.
+  - CLI commands for ontology inspection and management.
+  - Extensible architecture for custom ontology formats.
+- Add comprehensive test coverage and documentation.
+
+### Step 2 – Ontology Visualization 🎉 **COMPLETED**
+
+- Implement ontology structure visualization using Cytoscape.js:
+  - Interactive HTML generation showing entity types and relationships.
+  - Multiple layout algorithms (force-directed, hierarchical, circular, grid).
+  - Theme support (light/dark) and entity examples integration.
+  - CLI render-ontology command with comprehensive options.
+- Add comprehensive test coverage:
+  - 6 test functions covering all functionality.
+  - HTML generation, layout options, theme support, and error handling.
+- Self-contained HTML output with no external dependencies.
+
+### Step 3 – Data Curation
 
 - Implement HTML → curated text logic.
 - Generate test HTML in tests/data.
@@ -775,7 +821,7 @@ Each step will have its own detailed spec (docs/specs/*.md), tests, and code.
   - unwanted elements are removed,
   - visible text, headings, lists are preserved.
 
-### Step 3 – Load Entity Definitions
+### Step 4 – Load Entity Definitions
 
 - Implement loading of entity definitions from entities_extract/*.md.
 - Implement loading & merging of prompt_template.md with entity definitions.
@@ -785,7 +831,7 @@ Each step will have its own detailed spec (docs/specs/*.md), tests, and code.
 - Add CLI command to:
   - load entities and print them to stdout (for inspection).
 
-### Step 4 – Neo4j Bootstrap
+### Step 5 – Neo4j Bootstrap
 
 - Implement connection to Neo4j.
 - Initialize schema:
@@ -798,7 +844,7 @@ Each step will have its own detailed spec (docs/specs/*.md), tests, and code.
   - using Docker-based Neo4j fixture in pytest.
   - implement initial CLI query behaviours (e.g. list-types).
 
-### Step 5 – Plug LLM
+### Step 6 – Plug LLM
 
 - Implement prompt generation from:
   - curated text + merged prompt + entity definitions.
@@ -810,7 +856,7 @@ Each step will have its own detailed spec (docs/specs/*.md), tests, and code.
 - Add CLI command to:
   - test model calling with sample data (e.g. test-llm).
 
-### Step 6 – Ingest Pipeline
+### Step 7 – Ingest Pipeline
 
 - Implement full ingestion pipeline:
   - read HTML → curate text → LLM extract → process_before_store → store in KG.
@@ -821,22 +867,23 @@ Each step will have its own detailed spec (docs/specs/*.md), tests, and code.
   - verify Neo4j content matches expectations.
 - Refine query behaviour based on early usage.
 
-### Step 7 – Rendering
+### Step 8 – Graph Rendering
 
 - Implement render command:
   - subgraph extraction based on namespace, depth, and max_nodes.
-  - HTML/JS generation using neovis.js.
+  - HTML/JS generation using vis.js.
 - Test:
   - HTML is generated,
   - configuration options are respected.
 
-### Step 8 – Further Iterations
+### Step 9 – Further Iterations
 
 - Update this plan as we learn:
   - more granular LLM strategies,
   - better dedup and merging,
   - integration with KE SaaS and Content Lake,
   - advanced graph queries and GraphRAG integrations.
+  - expanded ontology visualization features and layouts.
 
 For each step:
 

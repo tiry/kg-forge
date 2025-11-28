@@ -19,6 +19,7 @@ from kg_forge.models.document import ParsedDocument
 from kg_forge.parsers.document_loader import DocumentLoader
 from kg_forge.utils.hashing import compute_content_hash
 from kg_forge.utils.interactive import InteractiveSession
+from kg_forge.ontology_manager import get_ontology_manager
 
 from .filesystem import FileDiscovery
 from .hooks import HookRegistry, EntityRecord, get_global_registry
@@ -79,23 +80,38 @@ class IngestPipeline:
         # Initialize components
         self.file_discovery = FileDiscovery(self.source_path)
         self.document_loader = DocumentLoader()
-        self.entity_loader = EntityDefinitionLoader()
         
-        # Set up prompt builder
-        entities_dir = Path(self.config.app.entities_extract_dir)
-        self.template_file = prompt_template or (entities_dir / "prompt_template.md")
-        self.entities_dir = entities_dir
+        # Initialize ontology manager and set active pack
+        self.ontology_manager = get_ontology_manager()
+        if self.config.app.ontology_pack:
+            try:
+                self.ontology_manager.set_active_ontology(self.config.app.ontology_pack)
+                logger.info(f"Using ontology pack: {self.config.app.ontology_pack}")
+            except Exception as e:
+                logger.warning(f"Failed to activate configured ontology pack '{self.config.app.ontology_pack}': {e}")
         
-        # Pre-load entity definitions to avoid loading them for every document
-        logger.info(f"Loading entity definitions from {entities_dir}")
-        self.entity_definitions = self.entity_loader.load_entity_definitions(entities_dir)
-        logger.info(f"Loaded {len(self.entity_definitions)} entity definitions from {entities_dir}")
-        
-        self.prompt_builder = PromptBuilder(self.entity_loader)
+        # Fallback to legacy entity loading if no ontology pack is available
+        active_pack = self.ontology_manager.get_active_ontology()
+        if active_pack:
+            # Use ontology pack
+            self.entity_definitions = active_pack.get_entity_definitions()
+            self.prompt_builder = PromptBuilder(ontology_id=active_pack.info.id)
+            logger.info(f"Loaded {len(self.entity_definitions)} entity definitions from ontology pack: {active_pack.info.id}")
+        else:
+            # Legacy fallback
+            logger.warning("No ontology pack available, falling back to legacy entity loading")
+            self.entity_loader = EntityDefinitionLoader()
+            entities_dir = Path(self.config.app.entities_extract_dir)
+            self.template_file = prompt_template or (entities_dir / "prompt_template.md")
+            self.entities_dir = entities_dir
+            self.entity_definitions = self.entity_loader.load_entity_definitions(entities_dir)
+            self.prompt_builder = PromptBuilder(self.entity_loader)
+            logger.info(f"Loaded {len(self.entity_definitions)} entity definitions from legacy path: {entities_dir}")
         
         # Initialize LLM client
+        ontology_id = active_pack.info.id if active_pack else None
         if fake_llm:
-            self.llm_client = FakeLLMExtractor()
+            self.llm_client = FakeLLMExtractor(ontology_id=ontology_id)
         else:
             model_name = model or self.config.aws.bedrock_model_name
             self.llm_client = BedrockLLMExtractor(
@@ -104,6 +120,7 @@ class IngestPipeline:
                 access_key_id=self.config.aws.access_key_id,
                 secret_access_key=self.config.aws.secret_access_key,
                 session_token=self.config.aws.session_token,
+                profile_name=self.config.aws.profile_name,
                 max_tokens=self.config.aws.bedrock_max_tokens,
                 temperature=self.config.aws.bedrock_temperature
             )
@@ -323,12 +340,18 @@ class IngestPipeline:
     def _extract_entities(self, curated_doc: ParsedDocument):
         """Extract entities from document using LLM."""
         try:
-            # Build prompt using cached entity definitions
-            prompt = self.prompt_builder.build_prompt_with_definitions(
-                curated_doc.text, 
-                self.entity_definitions,
-                self.template_file
-            )
+            # Build prompt using ontology pack or cached entity definitions
+            active_pack = self.ontology_manager.get_active_ontology()
+            if active_pack:
+                # Use ontology pack for prompt building
+                prompt = self.prompt_builder.build_ontology_prompt(curated_doc.text)
+            else:
+                # Fallback to legacy method
+                prompt = self.prompt_builder.build_prompt_with_definitions(
+                    curated_doc.text, 
+                    self.entity_definitions,
+                    self.template_file
+                )
             
             # Call LLM for entity extraction
             result = self.llm_client.extract_entities(prompt)

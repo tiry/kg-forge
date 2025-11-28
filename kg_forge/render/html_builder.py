@@ -12,7 +12,7 @@ import jinja2
 from neo4j.time import DateTime as Neo4jDateTime
 
 from kg_forge.render.graph_query import GraphData, NodeRecord, RelationshipRecord, SeedConfig
-from kg_forge.render.style_config import StyleConfig, default_style_config
+from kg_forge.render.style_config import StyleConfig, default_style_config, get_ontology_style_config
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +25,20 @@ class HtmlBuilder:
     to render interactive graph visualizations without requiring a live Neo4j connection.
     """
     
-    def __init__(self, style_config: StyleConfig = None):
+    def __init__(self, style_config: StyleConfig = None, ontology_id: Optional[str] = None):
         """
         Initialize HTML builder with styling configuration.
         
         Args:
             style_config: Custom style configuration (uses default if None)
+            ontology_id: ID of ontology pack to use for styling
         """
-        self.style_config = style_config or default_style_config
+        if style_config:
+            self.style_config = style_config
+        elif ontology_id:
+            self.style_config = get_ontology_style_config(ontology_id)
+        else:
+            self.style_config = default_style_config
         self._setup_jinja_env()
     
     def _setup_jinja_env(self):
@@ -121,18 +127,16 @@ class HtmlBuilder:
         # Serialize graph data for JSON embedding
         graph_data_json = self._serialize_graph_data(graph_data)
         
-        # Generate neovis.js configuration
-        neovis_config = self.style_config.generate_neovis_config(
-            graph_data.nodes, graph_data.relationships
-        )
-        neovis_config_json = json.dumps(neovis_config, indent=2)
+        # Generate vis.js configuration (simplified since vis.js handles styling inline)
+        vis_config = {"embedded_mode": True}
+        vis_config_json = json.dumps(vis_config, indent=2)
         
         # Prepare template context
         template_vars = {
             'namespace': namespace,
             'graph_data': graph_data,
             'graph_data_json': graph_data_json,
-            'neovis_config_json': neovis_config_json,
+            'vis_config_json': vis_config_json,
             'generation_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'seed_info': seed_info,
             'depth': depth,

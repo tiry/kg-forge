@@ -16,3 +16,7 @@ aws:
 app:
   log_level: INFO
   default_namespace: default
+  # Ontology pack to use for entity definitions and styling
+  ontology_pack: ai_ml_confluence
+  # Directory containing ontology packs (relative to project root)
+  ontology_packs_dir: ontology_packs

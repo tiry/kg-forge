@@ -3,15 +3,25 @@ LLM prompt builder for entity extraction.
 """
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from kg_forge.entities.definitions import EntityDefinitionLoader
+from kg_forge.ontology_manager import get_ontology_manager
 
 
 class PromptBuilder:
     """Builds prompts for entity extraction from document content and entity definitions."""
     
-    def __init__(self, entity_loader: EntityDefinitionLoader):
+    def __init__(self, entity_loader: Optional[EntityDefinitionLoader] = None, ontology_id: Optional[str] = None):
+        """
+        Initialize prompt builder.
+        
+        Args:
+            entity_loader: Legacy entity loader (for backward compatibility)
+            ontology_id: ID of ontology pack to use for prompts
+        """
         self.entity_loader = entity_loader
+        self.ontology_id = ontology_id
+        self.ontology_manager = get_ontology_manager()
     
     def build_prompt(self, document_content: str, entities_dir: Path, 
                     template_file: Path) -> str:
@@ -62,6 +72,27 @@ class PromptBuilder:
         merged_prompt = self.entity_loader.build_merged_prompt(template_content, entity_definitions)
         
         # Inject document content into the template
+        final_prompt = merged_prompt.replace('{{DOCUMENT_CONTENT}}', document_content)
+        
+        return final_prompt
+    
+    def build_ontology_prompt(self, document_content: str, ontology_id: Optional[str] = None) -> str:
+        """
+        Build extraction prompt using ontology pack.
+        
+        Args:
+            document_content: Document content to analyze
+            ontology_id: Specific ontology pack ID, or use configured default
+            
+        Returns:
+            Complete prompt string ready for LLM
+        """
+        target_ontology = ontology_id or self.ontology_id
+        
+        # Build prompt using ontology manager
+        merged_prompt = self.ontology_manager.build_extraction_prompt(target_ontology)
+        
+        # Inject document content
         final_prompt = merged_prompt.replace('{{DOCUMENT_CONTENT}}', document_content)
         
         return final_prompt

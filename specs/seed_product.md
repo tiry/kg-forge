@@ -92,7 +92,12 @@ It is **not** a production service; it is an **experiment platform** that helps 
    - See which workstreams and teams map to which AI/ML domains.
    - Surface recurring concerns (e.g., security) and where they appear.
 
-4. **Prepare for a future production-grade system**
+4. **Visualize and understand ontology structure**
+   - Generate interactive visualizations of entity types and their relationships.
+   - Explore ontology structure using different layout algorithms (force-directed, hierarchical, circular, grid).
+   - Include entity examples to better understand the ontology scope and coverage.
+
+5. **Prepare for a future production-grade system**
    - Validate what ontology works.
    - Validate what extraction strategies are robust.
    - Produce a reference graph that can inform a future SaaS product 
@@ -119,6 +124,10 @@ v1 is a **single-machine CLI tool** focused on one primary source (filesystem HT
     - Find docs related to a given entity.
   - `render`
     - Generate an HTML file that visualizes a subgraph for exploration.
+  - `render-ontology`
+    - Generate interactive HTML visualization of ontology structure.
+    - Show entity types and their relationships using Cytoscape.js.
+    - Support multiple layout algorithms and themes.
 - **Ontology Management (Experimental)**
   - Entity-type definitions + examples in markdown files.
   - Relations between entity types defined in markdown.

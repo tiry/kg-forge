@@ -2,8 +2,9 @@
 Visual styling configuration for graph rendering with neovis.js.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from kg_forge.render.graph_query import NodeRecord, RelationshipRecord
+from kg_forge.ontology_manager import get_ontology_manager
 
 
 # Default color palette
@@ -45,8 +46,8 @@ DEFAULT_NODE_STYLES = {
 }
 
 
-# Entity type specific styles
-ENTITY_TYPE_STYLES = {
+# Fallback entity type styles (used when no ontology pack provides styles)
+FALLBACK_ENTITY_TYPE_STYLES = {
     "Product": {
         "color": COLORS["entity_product"],
         "borderColor": "#1a6b1a"
@@ -115,14 +116,18 @@ class StyleConfig:
     for nodes and relationships based on their types and properties.
     """
     
-    def __init__(self, custom_styles: Dict[str, Any] = None):
+    def __init__(self, custom_styles: Dict[str, Any] = None, ontology_id: Optional[str] = None):
         """
-        Initialize with optional custom style overrides.
+        Initialize with optional custom style overrides and ontology pack.
         
         Args:
             custom_styles: Dictionary with custom style configurations
+            ontology_id: ID of ontology pack to use for styling
         """
         self.custom_styles = custom_styles or {}
+        self.ontology_id = ontology_id
+        self.ontology_manager = get_ontology_manager()
+        self._ontology_styles: Optional[Dict[str, Any]] = None
     
     def get_node_style(self, node: NodeRecord) -> Dict[str, Any]:
         """
@@ -141,9 +146,10 @@ class StyleConfig:
         # Apply entity type specific styling
         if primary_label == "Entity":
             entity_type = node.properties.get("entity_type")
-            if entity_type and entity_type in ENTITY_TYPE_STYLES:
-                type_style = ENTITY_TYPE_STYLES[entity_type]
-                style.update(type_style)
+            if entity_type:
+                type_style = self._get_entity_type_style(entity_type)
+                if type_style:
+                    style.update(type_style)
         
         # Calculate size based on properties
         style["size"] = self._calculate_node_size(node)
@@ -272,6 +278,79 @@ class StyleConfig:
         
         return config
     
+    def _get_entity_type_style(self, entity_type: str) -> Optional[Dict[str, Any]]:
+        """
+        Get style configuration for specific entity type.
+        
+        Args:
+            entity_type: Type of entity to get style for
+            
+        Returns:
+            Style configuration dictionary or None if not found
+        """
+        # Try ontology pack styles first
+        if self._ontology_styles is None:
+            self._load_ontology_styles()
+        
+        if self._ontology_styles and entity_type in self._ontology_styles.get("entity_colors", {}):
+            color = self._ontology_styles["entity_colors"][entity_type]
+            return {
+                "color": color,
+                "borderColor": self._darken_color(color)
+            }
+        
+        # Fallback to hardcoded styles
+        if entity_type in FALLBACK_ENTITY_TYPE_STYLES:
+            return FALLBACK_ENTITY_TYPE_STYLES[entity_type]
+        
+        return None
+    
+    def _load_ontology_styles(self) -> None:
+        """Load styles from active or specified ontology pack."""
+        try:
+            style_config = self.ontology_manager.get_style_config(self.ontology_id)
+            if style_config:
+                self._ontology_styles = {
+                    "entity_colors": style_config.entity_colors,
+                    "entity_shapes": style_config.entity_shapes,
+                    "relationship_colors": style_config.relationship_colors,
+                    "relationship_styles": style_config.relationship_styles
+                }
+            else:
+                self._ontology_styles = {}
+        except Exception:
+            # Fallback to empty styles if ontology loading fails
+            self._ontology_styles = {}
+    
+    def _darken_color(self, color: str) -> str:
+        """
+        Darken a hex color for border styling.
+        
+        Args:
+            color: Hex color string (e.g., "#ff0000")
+            
+        Returns:
+            Darkened hex color string
+        """
+        if not color.startswith("#") or len(color) != 7:
+            return "#333333"  # Fallback
+        
+        try:
+            # Convert hex to RGB
+            r = int(color[1:3], 16)
+            g = int(color[3:5], 16)
+            b = int(color[5:7], 16)
+            
+            # Darken by 30%
+            r = max(0, int(r * 0.7))
+            g = max(0, int(g * 0.7))
+            b = max(0, int(b * 0.7))
+            
+            # Convert back to hex
+            return f"#{r:02x}{g:02x}{b:02x}"
+        except ValueError:
+            return "#333333"  # Fallback on error
+    
     def _calculate_node_size(self, node: NodeRecord) -> int:
         """
         Calculate node size based on properties and importance.
@@ -298,3 +377,16 @@ class StyleConfig:
 
 # Global instance for default styling
 default_style_config = StyleConfig()
+
+
+def get_ontology_style_config(ontology_id: Optional[str] = None) -> StyleConfig:
+    """
+    Get style configuration for specific ontology pack.
+    
+    Args:
+        ontology_id: ID of ontology pack, or None for active pack
+        
+    Returns:
+        StyleConfig instance configured for the ontology
+    """
+    return StyleConfig(ontology_id=ontology_id)

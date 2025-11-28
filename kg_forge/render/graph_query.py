@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class NodeRecord:
     """Represents a node in the graph data structure."""
     
-    id: int
+    id: Union[int, str]  # Can be elementId (string) or legacy id (int)
     labels: List[str]
     properties: Dict[str, Any]
     
@@ -43,9 +43,9 @@ class NodeRecord:
 class RelationshipRecord:
     """Represents a relationship in the graph data structure."""
     
-    id: int
-    start_node: int
-    end_node: int
+    id: Union[int, str]  # Can be elementId (string) or legacy id (int)
+    start_node: Union[int, str]
+    end_node: Union[int, str]
     type: str
     properties: Dict[str, Any]
 
@@ -157,8 +157,14 @@ class GraphQuery:
                 f"(from {len(all_nodes)} total nodes)"
             )
             
-            return GraphData(nodes=final_nodes, relationships=final_relationships)
+            graph_data = GraphData(nodes=final_nodes, relationships=final_relationships)
+            logger.debug(f"Created GraphData with {graph_data.node_count} nodes, is_empty: {graph_data.is_empty}")
+            return graph_data
             
+        except ValueError as e:
+            # Seed resolution errors should be re-raised as-is
+            logger.error(f"Seed resolution error: {e}")
+            raise
         except Exception as e:
             logger.error(f"Error querying subgraph: {e}")
             raise GraphConnectionError(f"Failed to query subgraph: {e}") from e
@@ -193,24 +199,47 @@ class GraphQuery:
             doc_query = """
             MATCH (d:Doc {namespace: $namespace})
             WHERE d.doc_id IN $doc_ids
-            RETURN id(d) as id, labels(d) as labels, properties(d) as properties
+            RETURN d.doc_id as doc_id, elementId(d) as id, labels(d) as labels, properties(d) as properties
             """
             
             with self.client.session() as session:
                 result = session.run(doc_query, namespace=namespace, doc_ids=seeds.doc_ids)
-                for record in result:
+                found_docs = []
+                result_records = list(result)  # Convert to list to allow multiple iterations
+                
+                for record in result_records:
+                    found_docs.append(record["doc_id"])
                     seed_nodes.append(NodeRecord(
                         id=record["id"],
                         labels=record["labels"],
                         properties=record["properties"]
                     ))
+                
+                # Check for missing documents and provide helpful error
+                missing_docs = set(seeds.doc_ids) - set(found_docs)
+                if missing_docs:
+                    # Get available docs for helpful error message
+                    available_query = "MATCH (d:Doc {namespace: $namespace}) RETURN d.doc_id as doc_id ORDER BY d.doc_id"
+                    available_result = session.run(available_query, namespace=namespace)
+                    available_docs = [record["doc_id"] for record in available_result]
+                    
+                    error_msg = f"Seed documents not found: {', '.join(missing_docs)}"
+                    if available_docs:
+                        error_msg += f"\nAvailable documents in namespace '{namespace}': {', '.join(available_docs[:10])}"
+                        if len(available_docs) > 10:
+                            error_msg += f" ... and {len(available_docs) - 10} more"
+                    else:
+                        error_msg += f"\nNo documents found in namespace '{namespace}'"
+                    error_msg += f"\nUse: kg-forge query --namespace {namespace} list-docs"
+                    
+                    raise ValueError(error_msg)
         
         # Resolve entity seeds
         if seeds.entities:
             for entity_spec in seeds.entities:
                 entity_query = """
                 MATCH (e:Entity {namespace: $namespace, entity_type: $entity_type, name: $name})
-                RETURN id(e) as id, labels(e) as labels, properties(e) as properties
+                RETURN elementId(e) as id, labels(e) as labels, properties(e) as properties
                 """
                 
                 with self.client.session() as session:
@@ -220,12 +249,22 @@ class GraphQuery:
                         entity_type=entity_spec.get("type"),
                         name=entity_spec.get("name")
                     )
+                    
+                    entity_found = False
                     for record in result:
+                        entity_found = True
                         seed_nodes.append(NodeRecord(
                             id=record["id"],
                             labels=record["labels"],
                             properties=record["properties"]
                         ))
+                    
+                    if not entity_found:
+                        entity_type = entity_spec.get("type")
+                        entity_name = entity_spec.get("name")
+                        error_msg = f"Entity seed not found: type='{entity_type}', name='{entity_name}'"
+                        error_msg += f"\nUse: kg-forge query --namespace {namespace} list-entities --type {entity_type}"
+                        raise ValueError(error_msg)
         
         logger.debug(f"Resolved {len(seed_nodes)} seed nodes")
         return seed_nodes
@@ -241,17 +280,29 @@ class GraphQuery:
         """Expand subgraph from seed nodes using BFS traversal."""
         seed_ids = [node.id for node in seed_nodes]
         
-        # Build the expansion query
-        query = """
+        # Build the expansion query with proper parameter handling
+        if depth == 1:
+            range_pattern = "[*1..1]"
+        elif depth == 2:
+            range_pattern = "[*1..2]"
+        elif depth == 3:
+            range_pattern = "[*1..3]"
+        elif depth == 4:
+            range_pattern = "[*1..4]"
+        elif depth == 5:
+            range_pattern = "[*1..5]"
+        else:
+            range_pattern = f"[*1..{min(depth, 10)}]"  # Cap at 10 for performance
+        
+        query = f"""
         MATCH (seed)
-        WHERE id(seed) IN $seed_ids
-        CALL {
-            WITH seed
-            MATCH path = (seed)-[*1..$depth]-(connected)
+        WHERE elementId(seed) IN $seed_ids
+        CALL (seed) {{
+            MATCH path = (seed)-{range_pattern}-(connected)
             WHERE seed.namespace = $namespace 
               AND connected.namespace = $namespace
             RETURN nodes(path) as path_nodes, relationships(path) as path_rels
-        }
+        }}
         WITH collect(DISTINCT path_nodes) as all_node_paths, 
              collect(DISTINCT path_rels) as all_rel_paths
         UNWIND all_node_paths as node_path
@@ -280,13 +331,15 @@ class GraphQuery:
                 nodes = []
                 for neo4j_node in record["all_nodes"]:
                     node = NodeRecord(
-                        id=neo4j_node.id,
+                        id=neo4j_node.element_id,  # Use element_id instead of deprecated id
                         labels=list(neo4j_node.labels),
                         properties=dict(neo4j_node)
                     )
                     
                     # Apply entity type filtering
-                    if self._should_include_node(node, include_types, exclude_types):
+                    should_include = self._should_include_node(node, include_types, exclude_types)
+                    logger.debug(f"Node {node.id} ({node.labels}): should_include={should_include}")
+                    if should_include:
                         nodes.append(node)
                 
                 # Process relationships
@@ -295,13 +348,13 @@ class GraphQuery:
                 
                 for neo4j_rel in record["all_rels"]:
                     # Only include relationships between included nodes
-                    if (neo4j_rel.start_node.id in node_ids and 
-                        neo4j_rel.end_node.id in node_ids):
+                    if (neo4j_rel.start_node.element_id in node_ids and 
+                        neo4j_rel.end_node.element_id in node_ids):
                         
                         rel = RelationshipRecord(
-                            id=neo4j_rel.id,
-                            start_node=neo4j_rel.start_node.id,
-                            end_node=neo4j_rel.end_node.id,
+                            id=neo4j_rel.element_id,
+                            start_node=neo4j_rel.start_node.element_id,
+                            end_node=neo4j_rel.end_node.element_id,
                             type=neo4j_rel.type,
                             properties=dict(neo4j_rel)
                         )
