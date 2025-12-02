@@ -236,7 +236,11 @@ This project is currently in early development. The following features are imple
   - [x] Extract metadata (title, breadcrumb, links)
   - [x] Generate content hashes for change detection
   - [x] LlamaIndex-compatible document models
-- [ ] Entity definition loading
+- [x] Entity definition loading
+  - [x] Parse entity definitions from markdown files
+  - [x] Flexible markdown parsing (handles spacing/case variations)
+  - [x] Template merging for LLM prompts
+  - [x] CLI commands: list, show, validate, template
 - [ ] LLM integration for entity extraction
 - [ ] Neo4j graph operations
 - [ ] Graph visualization
