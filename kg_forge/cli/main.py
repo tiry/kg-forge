@@ -13,6 +13,7 @@ from kg_forge.cli.query import query
 from kg_forge.cli.render import render
 from kg_forge.cli.neo4j_ops import neo4j_start, neo4j_stop, export_entities
 from kg_forge.cli.entities import entities
+from kg_forge.cli.db import db_group
 
 
 # Create Rich console for output
@@ -74,6 +75,7 @@ cli.add_command(neo4j_start)
 cli.add_command(neo4j_stop)
 cli.add_command(export_entities)
 cli.add_command(entities)
+cli.add_command(db_group)
 
 
 def main() -> None:

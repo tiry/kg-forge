@@ -24,6 +24,11 @@ class AWSConfig(BaseModel):
     bedrock_model_name: str = Field(default="anthropic.claude-3-haiku-20240307-v1:0")
 
 
+class GraphConfig(BaseModel):
+    """Graph database configuration."""
+    backend: str = Field(default="neo4j")
+
+
 class AppConfig(BaseModel):
     """Application configuration."""
     log_level: str = Field(default="INFO")
@@ -51,6 +56,7 @@ class Settings(BaseModel):
     """Main configuration class."""
     neo4j: Neo4jConfig = Field(default_factory=Neo4jConfig)
     aws: AWSConfig = Field(default_factory=AWSConfig)
+    graph: GraphConfig = Field(default_factory=GraphConfig)
     app: AppConfig = Field(default_factory=AppConfig)
 
     @classmethod

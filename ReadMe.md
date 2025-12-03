@@ -24,20 +24,54 @@ kg_forge/
 │   ├── cli/                # CLI commands
 │   │   ├── __init__.py
 │   │   ├── main.py         # Main CLI entry point
+│   │   ├── db.py           # Database commands (init, status, clear)
+│   │   ├── entities.py     # Entity commands (list, show, validate)
+│   │   ├── parse.py        # Parse command
 │   │   ├── ingest.py       # Ingest command
 │   │   ├── query.py        # Query command
 │   │   ├── render.py       # Render command
-│   │   └── neo4j_ops.py    # Neo4j operations
+│   │   └── neo4j_ops.py    # Neo4j operations (start/stop)
 │   ├── config/             # Configuration
 │   │   ├── __init__.py
-│   │   └── settings.py     # Settings management
+│   │   └── settings.py     # Settings management (GraphConfig)
+│   ├── models/             # Data models
+│   │   ├── __init__.py
+│   │   └── document.py     # Document model
+│   ├── parsers/            # Content parsers
+│   │   ├── __init__.py
+│   │   ├── html_parser.py  # HTML parsing
+│   │   └── document_loader.py # Document loading
+│   ├── entities/           # Entity definitions
+│   │   ├── __init__.py
+│   │   ├── models.py       # Entity models
+│   │   ├── parser.py       # Entity definition parser
+│   │   ├── loader.py       # Entity definition loader
+│   │   └── template.py     # Template merging
+│   ├── graph/              # Graph database abstraction
+│   │   ├── __init__.py
+│   │   ├── base.py         # Abstract base classes
+│   │   ├── exceptions.py   # Graph exceptions
+│   │   ├── factory.py      # Factory pattern
+│   │   └── neo4j/          # Neo4j implementation
+│   │       ├── __init__.py
+│   │       ├── client.py   # Connection manager
+│   │       ├── schema.py   # Schema management
+│   │       ├── entity_repo.py   # Entity repository
+│   │       └── document_repo.py # Document repository
 │   └── utils/              # Utilities
 │       ├── __init__.py
 │       └── logging.py      # Logging setup
 ├── tests/                  # Test suite
 │   ├── __init__.py
 │   ├── test_cli/           # CLI tests
-│   └── test_config/        # Config tests
+│   ├── test_config/        # Config tests
+│   ├── test_parsers/       # Parser tests
+│   ├── test_entities/      # Entity tests
+│   └── test_graph/         # Graph database tests
+│       ├── __init__.py
+│       ├── conftest.py     # Shared fixtures (Rancher-compatible)
+│       ├── test_entity_repo.py    # Unit tests (mocks)
+│       └── test_integration.py    # Integration tests (Docker)
 ├── entities_extract/       # Entity definitions
 │   ├── product.md          # Product entity definition
 │   ├── component.md        # Component entity definition
@@ -48,12 +82,19 @@ kg_forge/
 │   └── prompt_template.md  # Prompt template for entity extraction
 ├── specs/                  # Specification documents
 │   ├── seed.md             # Initial specification
-│   └── 01-cli-foundation.md # CLI foundation spec
+│   ├── 01-cli-foundation.md         # CLI foundation
+│   ├── 02-html-parsing-and-document-model.md  # HTML parsing
+│   ├── 03-entity-definitions-loading.md  # Entity loading
+│   └── 04-neo4j-bootstrap.md        # Neo4j implementation
+├── docs/                   # Documentation
+│   ├── CI_SETUP.md         # CI/CD setup guide
+│   └── PARSING_HTML.md     # HTML parsing documentation
 ├── requirements.txt        # Project dependencies
 ├── setup.py               # Package setup file
+├── docker-compose.yml     # Neo4j container configuration
 ├── .env.example           # Example environment variables
 ├── kg_forge.yaml.example  # Example YAML configuration
-└── .gitignore             # Git ignore file
+└── .gitignore             # Git ignore file  
 ```
 
 ## Installation
@@ -143,14 +184,24 @@ kg-forge render
 kg-forge render --out custom_graph.html --depth 3 --max-nodes 200
 ```
 
-#### Neo4j Operations
+#### Database Operations
 
 ```bash
-# Start Neo4j database
+# Start Neo4j database (via Docker)
 kg-forge neo4j-start
 
 # Stop Neo4j database
 kg-forge neo4j-stop
+
+# Initialize database schema
+kg-forge db init
+
+# Check database status and statistics
+kg-forge db status
+kg-forge db status --namespace test
+
+# Clear namespace data
+kg-forge db clear --namespace test --confirm
 
 # Export entities from graph to markdown files
 kg-forge export-entities --output-dir custom_entities/
@@ -211,16 +262,58 @@ app:
 
 ### Running Tests
 
+kg-forge includes comprehensive unit and integration tests.
+
+#### Unit Tests (Fast, No Dependencies)
+
 ```bash
-# Run all tests
-pytest
+# Activate virtual environment first
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Run with coverage report
-pytest --cov=kg_forge
+# Run all unit tests
+pytest tests/test_cli tests/test_parsers tests/test_entities tests/test_graph/test_entity_repo.py -v
 
-# Run specific test file
-pytest tests/test_cli/test_main.py
+# Run specific test module
+pytest tests/test_graph/test_entity_repo.py -v
+
+# With coverage report
+pytest --cov=kg_forge tests/
 ```
+
+#### Integration Tests (Requires Docker or Rancher Desktop)
+
+The integration tests spin up a real Neo4j container to test database operations end-to-end.
+
+**For Docker Desktop:**
+```bash
+source venv/bin/activate
+pytest tests/test_graph/test_integration.py -v -s
+```
+
+**For Rancher Desktop:**
+```bash
+source venv/bin/activate
+
+# Option 1: Use --rancher flag
+pytest tests/test_graph/test_integration.py -v -s --rancher
+
+# Option 2: Use environment variable
+USE_RANCHER=true pytest tests/test_graph/test_integration.py -v -s
+```
+
+The integration tests cover:
+- Schema management (constraints & indexes)
+- Entity CRUD operations
+- Entity relationships
+- Document operations
+- Document-entity linking (MENTIONS relationships)
+- Namespace isolation
+
+#### Test Coverage
+
+- **Unit Tests**: 40+ tests (parsers, entities, CLI, repositories)
+- **Integration Tests**: 19 tests (real Neo4j database operations)
+- **Total**: 60+ comprehensive tests
 
 ### Project Status
 
@@ -241,8 +334,30 @@ This project is currently in early development. The following features are imple
   - [x] Flexible markdown parsing (handles spacing/case variations)
   - [x] Template merging for LLM prompts
   - [x] CLI commands: list, show, validate, template
+- [x] Neo4j graph operations
+  - [x] Repository pattern with abstract base classes
+  - [x] Factory pattern for backend selection
+  - [x] Neo4j implementation (schema, entities, documents, relationships)
+  - [x] Docker-compose integration
+  - [x] Database CLI commands (init, status, clear)
+  - [x] Name normalization for fuzzy matching
+  - [x] Namespace isolation (multi-tenancy)
+  - [x] Comprehensive test suite (27 tests)
 - [ ] LLM integration for entity extraction
-- [ ] Neo4j graph operations
 - [ ] Graph visualization
+
+#### Architecture
+
+**Graph Abstraction Layer:**
+- `kg_forge/graph/base.py` - Abstract interfaces (GraphClient, SchemaManager, EntityRepository, DocumentRepository)
+- `kg_forge/graph/factory.py` - Factory for backend-agnostic access
+- `kg_forge/graph/neo4j/` - Complete Neo4j implementation
+
+**Key Design Decisions:**
+- Single `Entity` label with `entity_type` property (flexible schema)
+- Canonical relationships (e.g., USES not USED_BY)
+- Namespace property on all nodes for multi-tenancy
+- Content hash tracking for deduplication
+- Normalized entity names for fuzzy matching
 
 ## License
