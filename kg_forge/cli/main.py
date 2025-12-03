@@ -14,6 +14,7 @@ from kg_forge.cli.render import render
 from kg_forge.cli.neo4j_ops import neo4j_start, neo4j_stop, export_entities
 from kg_forge.cli.entities import entities
 from kg_forge.cli.db import db_group
+from kg_forge.cli.extract import extract
 
 
 # Create Rich console for output
@@ -69,6 +70,7 @@ def version(ctx: click.Context) -> None:
 # Add command groups
 cli.add_command(ingest)
 cli.add_command(parse_html)
+cli.add_command(extract)
 cli.add_command(query)
 cli.add_command(render)
 cli.add_command(neo4j_start)

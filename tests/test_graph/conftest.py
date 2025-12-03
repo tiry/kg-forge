@@ -29,19 +29,29 @@ def pytest_addoption(parser):
 def docker_client(request: pytest.FixtureRequest) -> docker.DockerClient:
     """Create a Docker client compatible with both Docker and Rancher Desktop.
     
-    This fixture creates a Docker client based on the environment:
-    - If --rancher is specified or USE_RANCHER environment variable is set,
-      it uses the Rancher Desktop Docker socket.
-    - Otherwise, it uses the default Docker socket.
+    This fixture auto-detects which Docker environment to use:
+    1. Auto-detect: Check if ~/.rd/docker.sock exists (Rancher Desktop)
+    2. --rancher flag: Force Rancher Desktop socket
+    3. USE_RANCHER env var: Force Rancher Desktop socket
+    4. Default: Use standard Docker socket
     """
-    # Check if we should use Rancher Desktop Docker socket
-    use_rancher = request.config.getoption("--rancher") or os.environ.get("USE_RANCHER", "").lower() in ("true", "1", "yes")
+    # Check explicit flags first
+    explicit_rancher = request.config.getoption("--rancher") or os.environ.get("USE_RANCHER", "").lower() in ("true", "1", "yes")
+    
+    # Auto-detect Rancher Desktop by checking if socket exists
+    home = Path.home()
+    rancher_socket_path = home / ".rd" / "docker.sock"
+    auto_detected_rancher = rancher_socket_path.exists()
+    
+    use_rancher = explicit_rancher or auto_detected_rancher
     
     if use_rancher:
         # Use the Docker socket location for Rancher Desktop
-        home = Path.home()
-        socket_path = f"unix://{home}/.rd/docker.sock"
-        print(f"Using Rancher Desktop Docker socket: {socket_path}", flush=True)
+        socket_path = f"unix://{rancher_socket_path}"
+        if auto_detected_rancher and not explicit_rancher:
+            print(f"Auto-detected Rancher Desktop Docker socket: {socket_path}", flush=True)
+        else:
+            print(f"Using Rancher Desktop Docker socket: {socket_path}", flush=True)
         return docker.DockerClient(base_url=socket_path)
     else:
         # Use the default Docker socket location

@@ -47,6 +47,14 @@ kg_forge/
 │   │   ├── parser.py       # Entity definition parser
 │   │   ├── loader.py       # Entity definition loader
 │   │   └── template.py     # Template merging
+│   ├── extractors/         # LLM-based entity extraction
+│   │   ├── __init__.py
+│   │   ├── base.py         # Abstract base class
+│   │   ├── factory.py      # Auto-select provider
+│   │   ├── openrouter.py   # OpenRouter implementation
+│   │   ├── bedrock.py      # AWS Bedrock implementation
+│   │   ├── parser.py       # Response parser
+│   │   └── prompt_builder.py # Prompt builder
 │   ├── graph/              # Graph database abstraction
 │   │   ├── __init__.py
 │   │   ├── base.py         # Abstract base classes
@@ -174,6 +182,27 @@ kg-forge query show-doc --id <doc-id>
 kg-forge query find-related --entity "Knowledge Discovery" --type Product
 ```
 
+#### Extract Entities (Testing)
+
+Test entity extraction from documents without running the full ingestion pipeline:
+
+```bash
+# Extract all entity types from a document
+kg-forge extract test-doc.html
+
+# Extract specific entity types only
+kg-forge extract test-doc.html --types Product --types Team
+
+# Filter by confidence threshold
+kg-forge extract test-doc.html --min-confidence 0.7
+
+# Output as JSON
+kg-forge extract test-doc.html --format json
+
+# Use custom entity definitions directory
+kg-forge extract test-doc.html --entities-dir custom_entities/
+```
+
 #### Render Knowledge Graph
 
 ```bash
@@ -225,11 +254,16 @@ NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=password
 
-# AWS Bedrock Configuration
-AWS_ACCESS_KEY_ID=your_access_key_here
-AWS_SECRET_ACCESS_KEY=your_secret_key_here
-AWS_DEFAULT_REGION=us-east-1
-BEDROCK_MODEL_NAME=anthropic.claude-3-haiku-20240307-v1:0
+# LLM Provider Configuration
+# Option 1: OpenRouter (Recommended - easier to get started)
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL_NAME=anthropic/claude-3-haiku
+
+# Option 2: AWS Bedrock (Alternative)
+# AWS_ACCESS_KEY_ID=your_access_key_here  
+# AWS_SECRET_ACCESS_KEY=your_secret_key_here
+# AWS_DEFAULT_REGION=us-east-1
+# BEDROCK_MODEL_NAME=anthropic.claude-3-haiku-20240307-v1:0
 
 # Application Configuration
 LOG_LEVEL=INFO
@@ -343,7 +377,15 @@ This project is currently in early development. The following features are imple
   - [x] Name normalization for fuzzy matching
   - [x] Namespace isolation (multi-tenancy)
   - [x] Comprehensive test suite (27 tests)
-- [ ] LLM integration for entity extraction
+- [x] LLM integration for entity extraction
+  - [x] OpenRouter support (multi-model access)
+  - [x] AWS Bedrock support (Claude models)
+  - [x] Automatic provider selection
+  - [x] Prompt building from entity definitions
+  - [x] Response parsing with error handling
+  - [x] CLI extract command for testing
+  - [x] Retry logic and error tracking
+- [ ] Full ingestion pipeline with LLM extraction
 - [ ] Graph visualization
 
 #### Architecture

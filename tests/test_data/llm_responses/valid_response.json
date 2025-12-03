@@ -1,0 +1,22 @@
+{
+  "entities": [
+    {
+      "type_id": "product",
+      "name": "Knowledge Discovery",
+      "aliases": ["KD"],
+      "evidence": "The Knowledge Discovery product helps users find information"
+    },
+    {
+      "type_id": "technology",
+      "name": "Python",
+      "evidence": "Built using Python and modern frameworks"
+    },
+    {
+      "type_id": "engineering_team",
+      "name": "Platform Engineering",
+      "aliases": ["Platform Team"],
+      "evidence": "Maintained by the Platform Engineering team"
+    }
+  ],
+  "relations": []
+}

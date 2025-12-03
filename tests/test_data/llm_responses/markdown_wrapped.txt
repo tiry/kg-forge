@@ -1,0 +1,14 @@
+Here are the extracted entities:
+
+```json
+{
+  "entities": [
+    {
+      "type_id": "product",
+      "name": "Content Lake",
+      "evidence": "Content Lake stores all documentation"
+    }
+  ],
+  "relations": []
+}
+```
