@@ -51,7 +51,7 @@ class TestLLMEntityExtractorInitialization:
         extractor = MockLLMExtractor(model_name="test-model")
         
         assert extractor.model_name == "test-model"
-        assert extractor.max_retries == 1
+        assert extractor.max_retries == 3  # Default is now 3 for better reliability
         assert extractor.max_consecutive_failures == 10
         assert extractor._consecutive_failures == 0
         assert extractor.prompt_builder is not None

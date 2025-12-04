@@ -61,8 +61,6 @@ class Neo4jEntityRepository(EntityRepository):
         ON CREATE SET
             e.name = $name,
             e.created_at = timestamp()
-        ON MATCH SET
-            e = e
         WITH e, (e.created_at = timestamp()) as is_new
         WHERE is_new = false
         RETURN null as entity, 'exists' as status
@@ -75,7 +73,7 @@ class Neo4jEntityRepository(EntityRepository):
             normalized_name: $normalized_name
         })
         WHERE e.created_at = timestamp()
-        SET e += $properties
+        SET e += properties($properties)
         RETURN e as entity, 'created' as status
         """
         
@@ -84,7 +82,7 @@ class Neo4jEntityRepository(EntityRepository):
             "entity_type": entity_type,
             "name": name,
             "normalized_name": normalized_name,
-            "properties": properties
+            "properties": properties  # Pass properties dict directly (don't wrap in another dict)
         }
         
         try:

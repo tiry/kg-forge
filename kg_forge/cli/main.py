@@ -15,6 +15,7 @@ from kg_forge.cli.neo4j_ops import neo4j_start, neo4j_stop, export_entities
 from kg_forge.cli.entities import entities
 from kg_forge.cli.db import db_group
 from kg_forge.cli.extract import extract
+from kg_forge.cli.pipeline import run_pipeline
 
 
 # Create Rich console for output
@@ -68,6 +69,7 @@ def version(ctx: click.Context) -> None:
 
 
 # Add command groups
+cli.add_command(run_pipeline)  # End-to-end pipeline (Step 6)
 cli.add_command(ingest)
 cli.add_command(parse_html)
 cli.add_command(extract)

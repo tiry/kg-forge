@@ -298,6 +298,295 @@ Technology (3):
 
 ---
 
+## Pipeline Command (End-to-End Processing)
+
+🚀 **NEW** - The pipeline command orchestrates the complete end-to-end workflow: load documents → extract entities → store in Neo4j.
+
+### Basic Usage
+
+```bash
+# Run the complete pipeline on a directory
+kg-forge pipeline ~/Downloads/confluence-export/
+
+# Use a specific namespace
+kg-forge pipeline ~/Downloads/confluence-export/ --namespace production
+
+# Extract specific entity types only
+kg-forge pipeline ~/Downloads/confluence-export/ --types Product --types Technology
+```
+
+### What the Pipeline Does
+
+The pipeline command automates the entire knowledge graph construction process:
+
+1. **Loads** HTML documents from the source directory
+2. **Extracts** entities using LLM (OpenRouter or AWS Bedrock)
+3. **Normalizes** entity names (e.g., "K8S" → "Kubernetes") using default hooks
+4. **Stores** documents and entities in Neo4j
+5. **Links** documents to entities with MENTIONS relationships
+6. **Tracks** progress with real-time statistics
+
+### Pipeline Options
+
+```bash
+# Namespace (organize different projects)
+kg-forge pipeline docs/ --namespace confluence
+
+# Entity types (filter extraction)
+kg-forge pipeline docs/ --types Product --types Component
+
+# Confidence threshold (filter low-confidence entities)
+kg-forge pipeline docs/ --min-confidence 0.8
+
+# Skip already processed documents (hash-based)
+kg-forge pipeline docs/ --reprocess  # Force reprocess all
+
+# Batch size (process in batches)
+kg-forge pipeline docs/ --batch-size 20
+
+# Maximum consecutive failures before aborting
+kg-forge pipeline docs/ --max-failures 10
+
+# Dry run (test without writing to database)
+kg-forge pipeline docs/ --dry-run
+```
+
+### Interactive Mode 🎯
+
+**Human-in-the-Loop Entity Curation**
+
+Enable interactive mode for entity deduplication and validation:
+
+```bash
+# Enable interactive mode
+kg-forge pipeline docs/ --interactive
+
+# Alternative flag (same as --interactive)
+kg-forge pipeline docs/ --biraj
+```
+
+**What Interactive Mode Does:**
+
+When enabled, the pipeline will prompt you to:
+
+1. **Merge similar entities**
+   ```
+   Found similar entities: "Catherine J." and "Katherine Jones"
+   Merge them? [Y/n]: y
+   Which name should be canonical? 
+     1. Catherine J.
+     2. Katherine Jones
+   Choice [2]: 2
+   ```
+
+2. **Resolve ambiguous names**
+   ```
+   Found similar entities: "K8s" and "Kubernetes"
+   Merge them? [Y/n]: y
+   Canonical name: Kubernetes
+   ✓ Merged "K8s" → "Kubernetes"
+   ```
+
+3. **Review entity normalization**
+   - See what automatic normalizations were applied
+   - Confirm or reject suggested merges
+   - Choose canonical names for merged entities
+
+**When to Use Interactive Mode:**
+
+✅ **Use --interactive for:**
+- First-time ingestion of important documents
+- Curating a production knowledge graph
+- When entity quality is critical
+- Building a golden dataset
+
+❌ **Skip --interactive for:**
+- Batch processing large document sets
+- CI/CD pipelines (use default hooks automatically)
+- Quick testing or experimentation
+- Re-processing already curated data
+
+### Dry Run Mode
+
+Test the pipeline without writing to the database:
+
+```bash
+# Run extraction but don't store results
+kg-forge pipeline docs/ --dry-run
+
+# Combine with interactive to test curation workflow
+kg-forge pipeline docs/ --dry-run --interactive
+
+# See what would be extracted
+kg-forge pipeline docs/ --dry-run --min-confidence 0.9
+```
+
+**Dry run output shows:**
+- How many entities would be extracted
+- Which documents would be processed or skipped
+- Normalization and deduplication results
+- No database writes are performed
+
+### Pipeline Output
+
+**Progress Tracking:**
+
+```
+🚀  Knowledge Graph Pipeline
+📂 Source:       ~/Downloads/confluence-export/
+🏷️  Namespace:    default
+🔖 Entity types: all
+📊 Min confidence: 0.0
+♻️  Skip processed: Yes
+
+⚙️  Initializing components...
+✅ Components initialized
+
+ℹ️  Loaded 15 documents from ~/Downloads/confluence-export/
+
+[1/15 6.7%] PROCESSED Content-Lake_3352431259.html: 8 entities in 4.23s
+[2/15 13.3%] PROCESSED Architecture_3352234692.html: 12 entities in 5.18s
+[3/15 20.0%] SKIPPED Content-Model_3182532046.html: Already processed (hash match)
+[4/15 26.7%] PROCESSED Technology-Stack_3352234693.html: 6 entities in 3.92s
+...
+[15/15 100.0%] PROCESSED Summary_3352234699.html: 4 entities in 2.81s
+
+📊 Pipeline Results
+📄 Total documents:     15
+✅ Processed:           12
+⏭️  Skipped:             3
+❌ Failed:              0
+📈 Success rate:        100.0%
+🏷️  Total entities:      87
+🔗 Total relationships: 124
+⏱️  Duration:            58.42s
+
+✨ Pipeline completed successfully!
+```
+
+**With Errors:**
+
+```
+[8/15 53.3%] FAILED Document_123.html: LLM timeout after 30s
+
+⚠️  Errors encountered:
+
+  1. Document_123.html: LLM timeout after 30s
+  2. Document_456.html: Rate limit exceeded
+
+⚠️  Pipeline completed with 2 failure(s)
+```
+
+### Default Hooks
+
+The pipeline automatically applies these hooks:
+
+1. **Entity Name Normalization** (before_store)
+   - Converts common abbreviations to full names
+   - "K8S" → "Kubernetes"
+   - "AI/ML" → "Artificial Intelligence and Machine Learning"  
+   - "CICD" → "CI/CD"
+
+2. **Entity Deduplication** (after_batch, interactive mode only)
+   - Detects similar entity names
+   - Prompts for merge decisions
+   - Updates canonical names
+
+These hooks ensure consistency in your knowledge graph.
+
+### Advanced Examples
+
+**Production Ingestion:**
+
+```bash
+# High-quality extraction with interactive curation
+kg-forge pipeline confluence-docs/ \
+  --namespace production \
+  --min-confidence 0.85 \
+  --interactive \
+  --max-failures 3
+```
+
+**Quick Test Run:**
+
+```bash
+# Test extraction without database writes
+kg-forge pipeline test-docs/ \
+  --dry-run \
+  --types Product \
+  --min-confidence 0.9
+```
+
+**Batch Processing:**
+
+```bash
+# Process large document sets efficiently
+kg-forge pipeline large-corpus/ \
+  --namespace archive \
+  --batch-size 50 \
+  --skip-processed \
+  --max-failures 10
+```
+
+**Re-process with Higher Quality:**
+
+```bash
+# Force reprocess with stricter confidence
+kg-forge pipeline docs/ \
+  --reprocess \
+  --min-confidence 0.9 \
+  --interactive
+```
+
+### Idempotency & Resume
+
+The pipeline is **idempotent** by default:
+
+- Documents are identified by content hash (SHA-256)
+- Already processed documents are automatically skipped
+- Safe to run multiple times on the same directory
+- Resume after failures without re-processing
+
+```bash
+# First run - processes all 100 documents
+kg-forge pipeline docs/
+
+# Second run - skips all 100 (already processed)
+kg-forge pipeline docs/
+
+# Force reprocess
+kg-forge pipeline docs/ --reprocess
+```
+
+### Comparison: Pipeline vs. Ingest
+
+**Use `kg-forge pipeline` when:**
+- ✅ You want end-to-end automation
+- ✅ You have LLM configured (OpenRouter/Bedrock)
+- ✅ You want entity extraction + graph storage
+- ✅ You need progress tracking and error handling
+- ✅ You want interactive entity curation
+
+**Use `kg-forge ingest` when:**
+- ✅ You already have extracted entity JSON files
+- ✅ You want to store pre-processed data
+- ✅ LLM extraction is not needed
+- ✅ You're working with legacy data
+
+**Quick Reference:**
+
+| Feature | `pipeline` | `ingest` |
+|---------|-----------|----------|
+| Document Loading | ✅ Yes | ✅ Yes |
+| LLM Extraction | ✅ Yes | ❌ No |
+| Entity Normalization | ✅ Yes | ❌ No |
+| Interactive Mode | ✅ Yes | ❌ No |
+| Progress Tracking | ✅ Detailed | ✅ Basic |
+| Idempotency | ✅ Hash-based | ⚠️ Manual |
+| Dry Run | ✅ Yes | ❌ No |
+
+---
+
 ## Database Operations
 
 Manage the Neo4j database lifecycle.

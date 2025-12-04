@@ -46,6 +46,12 @@ class ResponseParser:
         try:
             data = json.loads(json_text)
         except json.JSONDecodeError as e:
+            # Log the problematic text for debugging
+            preview = json_text[:500] if len(json_text) > 500 else json_text
+            logger.error(f"Failed to parse JSON. Error: {e}")
+            logger.error(f"Response text (first 500 chars): {preview}")
+            if len(json_text) > 500:
+                logger.error(f"Full response length: {len(json_text)} characters")
             raise ParseError(f"Invalid JSON in LLM response: {e}")
         
         # Extract entities from parsed data

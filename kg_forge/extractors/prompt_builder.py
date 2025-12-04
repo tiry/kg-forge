@@ -40,7 +40,11 @@ class PromptBuilder:
         with open(self.template_path, 'r', encoding='utf-8') as f:
             self.template = f.read()
         
+        # Cache entity definitions (load once, reuse many times)
+        self._cached_definitions = self.loader.load_all().definitions
+        
         logger.info(f"Loaded prompt template from {self.template_path}")
+        logger.info(f"Cached {len(self._cached_definitions)} entity definitions")
     
     def build_extraction_prompt(
         self,
@@ -58,9 +62,8 @@ class PromptBuilder:
         Returns:
             Complete prompt with instructions, entity definitions, and content
         """
-        # Load entity definitions
-        all_defs_obj = self.loader.load_all()
-        all_definitions = all_defs_obj.definitions
+        # Use cached entity definitions (loaded once in __init__)
+        all_definitions = self._cached_definitions
         
         # Filter by types if specified (case-insensitive)
         if entity_types:

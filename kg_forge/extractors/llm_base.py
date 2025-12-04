@@ -36,7 +36,7 @@ class LLMEntityExtractor(EntityExtractor):
         self,
         model_name: str,
         entities_dir: str = "entities_extract",
-        max_retries: int = 1,
+        max_retries: int = 3,
         max_consecutive_failures: int = 10
     ):
         """Initialize LLM extractor.
@@ -44,7 +44,7 @@ class LLMEntityExtractor(EntityExtractor):
         Args:
             model_name: LLM model identifier
             entities_dir: Directory containing entity definition files
-            max_retries: Maximum retry attempts for failed calls
+            max_retries: Maximum retry attempts for failed calls (default: 3)
             max_consecutive_failures: Abort if this many consecutive failures
         """
         self.model_name = model_name
@@ -97,10 +97,12 @@ class LLMEntityExtractor(EntityExtractor):
                 error=f"Prompt building failed: {e}"
             )
         
-        # Call LLM with retry logic
+        # Call LLM with retry logic (includes parsing)
         response_text = None
         tokens_used = None
+        entities = None
         retry_count = 0
+        last_error = None
         
         while retry_count <= self.max_retries:
             try:
@@ -109,18 +111,52 @@ class LLMEntityExtractor(EntityExtractor):
                 response_text = response["text"]
                 tokens_used = response.get("tokens")
                 
-                # Reset consecutive failures on success
+                # Parse response (may raise ParseError)
+                entities = self.parser.parse(response_text)
+                
+                # Success! Reset consecutive failures and break
                 self._consecutive_failures = 0
                 break
                 
+            except ParseError as e:
+                # Parse errors are retryable (malformed LLM response)
+                last_error = e
+                retry_count += 1
+                
+                if retry_count <= self.max_retries:
+                    wait_time = 2 ** retry_count
+                    logger.warning(
+                        f"Parse error on attempt {retry_count}/{self.max_retries + 1}, "
+                        f"retrying in {wait_time}s: {e}"
+                    )
+                    time.sleep(wait_time)
+                else:
+                    # Max retries exceeded
+                    self._consecutive_failures += 1
+                    logger.error(f"Parse error after {retry_count} attempts: {e}")
+                    return ExtractionResult(
+                        entities=[],
+                        raw_response=response_text,
+                        model_name=self.model_name,
+                        tokens_used=tokens_used,
+                        extraction_time=time.time() - start_time,
+                        success=False,
+                        error=f"Parse error after {retry_count} attempts: {e}"
+                    )
+                
             except Exception as e:
+                # API or other errors
+                last_error = e
                 retry_count += 1
                 
                 # Check if retryable error
                 if self._is_retryable_error(e) and retry_count <= self.max_retries:
                     # Exponential backoff
                     wait_time = 2 ** retry_count
-                    logger.warning(f"Retryable error, waiting {wait_time}s: {e}")
+                    logger.warning(
+                        f"API error on attempt {retry_count}/{self.max_retries + 1}, "
+                        f"retrying in {wait_time}s: {e}"
+                    )
                     time.sleep(wait_time)
                 else:
                     # Non-retryable or max retries exceeded
@@ -134,43 +170,26 @@ class LLMEntityExtractor(EntityExtractor):
                         error=f"LLM API error: {e}"
                     )
         
-        # Parse response
-        try:
-            entities = self.parser.parse(response_text)
-            
-            # Filter by confidence if specified
-            if request.min_confidence > 0.0:
-                original_count = len(entities)
-                entities = [e for e in entities if e.confidence >= request.min_confidence]
-                if original_count > len(entities):
-                    logger.info(
-                        f"Filtered {original_count - len(entities)} entities "
-                        f"below confidence threshold {request.min_confidence}"
-                    )
-            
-            extraction_time = time.time() - start_time
-            
-            return ExtractionResult(
-                entities=entities,
-                raw_response=response_text,
-                model_name=self.model_name,
-                tokens_used=tokens_used,
-                extraction_time=extraction_time,
-                success=True
-            )
-            
-        except ParseError as e:
-            self._consecutive_failures += 1
-            logger.error(f"Parse error: {e}")
-            return ExtractionResult(
-                entities=[],
-                raw_response=response_text,
-                model_name=self.model_name,
-                tokens_used=tokens_used,
-                extraction_time=time.time() - start_time,
-                success=False,
-                error=f"Parse error: {e}"
-            )
+        # Filter by confidence if specified
+        if request.min_confidence > 0.0:
+            original_count = len(entities)
+            entities = [e for e in entities if e.confidence >= request.min_confidence]
+            if original_count > len(entities):
+                logger.info(
+                    f"Filtered {original_count - len(entities)} entities "
+                    f"below confidence threshold {request.min_confidence}"
+                )
+        
+        extraction_time = time.time() - start_time
+        
+        return ExtractionResult(
+            entities=entities,
+            raw_response=response_text,
+            model_name=self.model_name,
+            tokens_used=tokens_used,
+            extraction_time=extraction_time,
+            success=True
+        )
     
     @abstractmethod
     def _call_llm_api(self, prompt: str, max_tokens: int) -> Dict[str, Any]:
