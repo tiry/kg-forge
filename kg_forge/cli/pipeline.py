@@ -8,6 +8,7 @@ from kg_forge.models.pipeline import PipelineConfig
 from kg_forge.extractors.factory import create_extractor
 from kg_forge.graph.factory import get_graph_client
 from kg_forge.config.settings import Settings
+from kg_forge.utils.neo4j_manager import is_neo4j_running, start_neo4j, stop_neo4j
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,13 @@ logger = logging.getLogger(__name__)
     '--batch-size',
     default=10,
     type=int,
-    help='Number of documents to process in each batch'
+    help='Number of documents to process in each batch (deprecated, use --max-batch-docs)'
+)
+@click.option(
+    '--max-batch-docs',
+    default=None,
+    type=int,
+    help='Maximum number of documents to process in this run (excludes skipped docs). If not set, processes all documents.'
 )
 @click.option(
     '--max-failures',
@@ -66,6 +73,7 @@ def run_pipeline(
     min_confidence: float,
     skip_processed: bool,
     batch_size: int,
+    max_batch_docs: int,
     max_failures: int,
     interactive: bool,
     dry_run: bool
@@ -131,10 +139,29 @@ def run_pipeline(
         min_confidence=min_confidence,
         skip_processed=skip_processed,
         batch_size=batch_size,
+        max_batch_docs=max_batch_docs,
         max_failures=max_failures,
         interactive=interactive,
         dry_run=dry_run
     )
+    
+    # Check Neo4j status and start if needed
+    neo4j_started_by_us = False
+    
+    if not dry_run:
+        click.echo("🔍 Checking Neo4j status...")
+        if not is_neo4j_running():
+            click.echo("⚠️  Neo4j is not running. Starting Neo4j...")
+            success, message = start_neo4j()
+            if not success:
+                click.echo(f"\n❌ Failed to start Neo4j: {message}", err=True)
+                click.echo("Please start Neo4j manually or use: kg-forge neo4j-start", err=True)
+                raise click.Abort()
+            click.echo(f"✅ {message}")
+            neo4j_started_by_us = True
+        else:
+            click.echo("✅ Neo4j is already running")
+        click.echo()
     
     # Initialize components
     try:
@@ -153,6 +180,10 @@ def run_pipeline(
         click.echo("✅ Components initialized")
         click.echo()
     except Exception as e:
+        # If we started Neo4j, stop it before exiting
+        if neo4j_started_by_us:
+            click.echo("\n🛑 Stopping Neo4j (started by pipeline)...")
+            stop_neo4j()
         click.echo(f"\n❌ Initialization failed: {e}", err=True)
         raise click.Abort()
     
@@ -218,3 +249,12 @@ def run_pipeline(
                 graph_client.close()
             except:
                 pass
+        
+        # If we started Neo4j, stop it
+        if neo4j_started_by_us:
+            click.echo("\n🛑 Stopping Neo4j (started by pipeline)...")
+            success, message = stop_neo4j()
+            if success:
+                click.echo(f"✅ {message}")
+            else:
+                click.echo(f"⚠️  {message}", err=True)

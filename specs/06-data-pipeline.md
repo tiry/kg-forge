@@ -1024,6 +1024,8 @@ kg_forge/
 │   ├── orchestrator.py          # NEW: Pipeline orchestrator with hook support
 │   ├── hooks.py                 # NEW: Hook system (InteractiveSession, HookRegistry)
 │   └── default_hooks.py         # NEW: Default hooks (ENABLED by default)
+├── utils/
+│   └── neo4j_manager.py         # NEW: Auto Neo4j lifecycle management
 └── cli/
     ├── main.py                   # UPDATE: Add pipeline command
     └── pipeline.py               # NEW: Pipeline CLI with --interactive and --dry-run
@@ -1036,3 +1038,246 @@ tests/
     ├── test_hooks.py            # NEW: Test hook system & InteractiveSession
     └── test_integration.py      # NEW: E2E integration test with Neo4j
 ```
+
+---
+
+## Post-Implementation Enhancements
+
+### 1. Automatic Neo4j Lifecycle Management
+
+**Feature**: Pipeline automatically manages Neo4j container lifecycle.
+
+**Implementation** (`kg_forge/utils/neo4j_manager.py`):
+- `is_neo4j_running()` - Check if container is running
+- `start_neo4j()` - Start Neo4j via docker-compose, wait for readiness
+- `stop_neo4j()` - Stop Neo4j container
+
+**Behavior**:
+1. Before pipeline starts: Check if Neo4j is running
+2. If not running: Auto-start and wait for ready
+3. After pipeline completes: Auto-stop (if we started it)
+4. On errors: Clean shutdown
+
+**Benefits**:
+- No manual Neo4j management required
+- Consistent development workflow
+- Automatic cleanup
+
+### 2. Batch Processing Limit
+
+**Feature**: `--max-batch-docs` flag to limit processed documents per run.
+
+**CLI Option**:
+```bash
+kg-forge pipeline test_data/ --max-batch-docs 10
+```
+
+**Behavior**:
+- Only counts **processed** documents (excludes skipped)
+- Stops pipeline when limit reached
+- Runs `after_batch` hooks before stopping
+- If not set, processes all documents (default behavior)
+
+**Use Cases**:
+- Incremental processing in interactive mode
+- Testing with small batches
+- Cost control for LLM API calls
+- Controlled graph updates
+
+**Implementation**:
+```python
+# In PipelineConfig
+max_batch_docs: Optional[int] = None  # None = no limit
+
+# In orchestrator
+processed_count = 0
+for doc in documents:
+    if max_batch_docs and processed_count >= max_batch_docs:
+        logger.info(f"Reached batch limit of {max_batch_docs}")
+        break
+    
+    result = process(doc)
+    if result.success and not result.skipped:
+        processed_count += 1
+```
+
+### 3. Enhanced Interactive Mode
+
+**Feature**: Command-based entity review with per-document editing.
+
+**Interactive Hook** (`review_extracted_entities`):
+
+**Display Format**:
+```
+Document: Content-Lake_3352431259 - Content Lake Overview  
+Entities (5):
+1. product Data Platform (95%)
+2. technology Kubernetes (88%)
+3. component ML Pipeline (76%)
+4. technology PostgreSQL (92%)
+5. product Analytics Engine (85%)
+
+Review and edit these entities? [y/N]: y
+```
+
+**Commands**:
+- `delete N` - Remove entity by number
+- `edit N` - Rename entity by number
+- `merge N M` - Merge entity N into M (same type only)
+- `done` - Finish review and proceed
+
+**Example Session**:
+```
+Actions:
+  • 'delete N' - Delete entity N
+  • 'edit N' - Edit entity N's name  
+  • 'merge N M' - Merge entity N into M
+  • 'done' - Finish review
+
+Command [done]: edit 2
+Editing: technology Kubernetes
+New name [Kubernetes]: K8s Cluster
+✓ Renamed: 'Kubernetes' → 'K8s Cluster'
+
+Command [done]: merge 3 1
+Merging: component 'ML Pipeline' → 'Data Platform'
+✓ Merged 'ML Pipeline' into 'Data Platform'
+
+Command [done]: delete 5
+✗ Deleted: product Analytics Engine
+
+Command [done]: done
+
+Review complete:
+  • Final count: 3
+  • Edited: 1
+  • Merged: 1
+  • Deleted: 1
+```
+
+**Features**:
+- Number-based selection (easier than typing names)
+- Live entity list updates after each action
+- Type safety on merges
+- Undo-friendly (just re-run pipeline)
+- Summary statistics
+
+### 4. Global Entity Deduplication
+
+**Feature**: Fuzzy string matching across entire graph.
+
+**Implementation** (`deduplicate_similar_entities`):
+- Uses `difflib.SequenceMatcher` for similarity scoring
+- 75% similarity threshold
+- Only compares entities of same type
+- Interactive confirmation in interactive mode
+- Auto-merge with heuristics in non-interactive mode
+
+**Algorithm**:
+```python
+1. Query all entities from namespace
+2. For each pair of entities (same type):
+   - Calculate similarity score
+   - If score >= 75%:
+     - Add to similar_pairs list
+3. Sort by similarity (highest first)
+4. For each similar pair:
+   - Interactive: Ask user to confirm merge
+   - Non-interactive: Auto-merge (prefer longer name)
+   - Update all MENTIONS relationships
+   - Delete duplicate entity
+```
+
+**Example Output**:
+```
+⚙️  Running entity deduplication check for namespace 'default'...
+
+❓ Found 2 pair(s) of similar entities
+
+   📌 technology: 'K8s' ↔ 'Kubernetes' (similarity: 80%)
+   Merge these entities? [Y/n]: y
+   Which name should be kept as canonical?
+     1. K8s
+     2. Kubernetes
+   [Kubernetes]: 
+   ✅ Merged 'K8s' → 'Kubernetes'
+
+📊 Deduplication complete:
+   • Merged: 2
+```
+
+### 5. Neo4j Credentials
+
+**Connection Details**:
+```
+Username: neo4j
+Password: password
+Database: neo4j (default)
+
+Browser UI: http://localhost:7474
+Bolt Protocol: bolt://localhost:7687
+Container: kg-forge-neo4j
+```
+
+Configured in `docker-compose.yml`:
+```yaml
+environment:
+  - NEO4J_AUTH=neo4j/password
+```
+
+---
+
+## Updated CLI Usage
+
+```bash
+# Basic pipeline run (auto-starts Neo4j if needed)
+kg-forge pipeline test_data/
+
+# Interactive mode with entity review
+kg-forge pipeline test_data/ --interactive
+
+# Process only 10 documents
+kg-forge pipeline test_data/ --max-batch-docs 10
+
+# Interactive + batch limit
+kg-forge pipeline test_data/ --interactive --max-batch-docs 5
+
+# Specify namespace and types
+kg-forge pipeline test_data/ --namespace myproject --types product --types component
+
+# Dry run (no writes to graph)
+kg-forge pipeline test_data/ --dry-run
+
+# Reprocess all documents
+kg-forge pipeline test_data/ --reprocess
+
+# Full example
+kg-forge pipeline test_data/ \
+  --namespace confluence \
+  --types product --types technology \
+  --min-confidence 0.7 \
+  --max-batch-docs 20 \
+  --interactive
+```
+
+---
+
+## Complete Features List
+
+✅ End-to-end pipeline orchestration  
+✅ Document loading from HTML files  
+✅ Entity extraction via LLM  
+✅ Graph ingestion to Neo4j  
+✅ Hash-based idempotency  
+✅ Progress tracking & statistics  
+✅ Error handling with max failures  
+✅ Hook system (before_store, after_batch)  
+✅ **Interactive mode with command-based entity review**  
+✅ **Global entity deduplication with fuzzy matching**  
+✅ **Automatic Neo4j lifecycle management**  
+✅ **Batch processing limit (--max-batch-docs)**  
+✅ Default hooks (normalization, deduplication)  
+✅ Dry-run mode  
+✅ Comprehensive CLI with all options  
+✅ 206+ unit tests passing  
+✅ Integration tests with Neo4j (testcontainers)

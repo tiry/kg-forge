@@ -26,7 +26,7 @@ except ImportError:
 
 # Hook type definitions
 ProcessBeforeStoreHook = Callable[
-    ['Document', List['ExtractedEntity'], 'GraphClient'],
+    ['Document', List['ExtractedEntity'], 'GraphClient', Optional['InteractiveSession']],
     List['ExtractedEntity']
 ]
 
@@ -155,7 +155,8 @@ class HookRegistry:
         self,
         doc: 'Document',
         entities: List['ExtractedEntity'],
-        graph_client: 'GraphClient'
+        graph_client: 'GraphClient',
+        interactive: Optional[InteractiveSession] = None
     ) -> List['ExtractedEntity']:
         """
         Run all before-store hooks in sequence.
@@ -167,17 +168,23 @@ class HookRegistry:
             doc: The document being processed
             entities: Extracted entities
             graph_client: Neo4j client for queries/updates
+            interactive: Interactive session for user prompts (None if not interactive)
             
         Returns:
             Modified list of entities after all hooks have run
         """
         result = entities
         
-        
         for hook in self.before_store_hooks:
             try:
                 logger.debug(f"Running before_store hook: {hook.__name__}")
-                result = hook(doc, result, graph_client)
+                # Check if hook accepts interactive parameter
+                import inspect
+                sig = inspect.signature(hook)
+                if 'interactive' in sig.parameters:
+                    result = hook(doc, result, graph_client, interactive)
+                else:
+                    result = hook(doc, result, graph_client)
             except Exception as e:
                 logger.error(f"Error in before_store hook {hook.__name__}: {e}")
                 # Continue with other hooks despite error
@@ -188,7 +195,8 @@ class HookRegistry:
         self,
         entities: List['ExtractedEntity'],
         graph_client: 'GraphClient',
-        interactive: Optional[InteractiveSession] = None
+        interactive: Optional[InteractiveSession] = None,
+        namespace: str = "default"
     ):
         """
         Run all after-batch hooks in sequence.
@@ -197,11 +205,18 @@ class HookRegistry:
             entities: All entities added in this batch
             graph_client: Neo4j client for queries/updates
             interactive: Interactive session for user prompts (None if not interactive)
+            namespace: Namespace for graph operations (default: "default")
         """
         for hook in self.after_batch_hooks:
             try:
                 logger.debug(f"Running after_batch hook: {hook.__name__}")
-                hook(entities, graph_client, interactive)
+                # Check if hook accepts namespace parameter
+                import inspect
+                sig = inspect.signature(hook)
+                if 'namespace' in sig.parameters:
+                    hook(entities, graph_client, interactive, namespace=namespace)
+                else:
+                    hook(entities, graph_client, interactive)
             except Exception as e:
                 logger.error(f"Error in after_batch hook {hook.__name__}: {e}")
                 # Continue with other hooks despite error

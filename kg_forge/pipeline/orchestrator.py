@@ -114,8 +114,14 @@ class PipelineOrchestrator:
             
             # Process each file one at a time
             consecutive_failures = 0
+            processed_count = 0  # Track processed docs (excludes skipped)
             
             for file_path in html_files:
+                # Check if we've reached the batch limit (only count processed docs)
+                if self.config.max_batch_docs is not None and processed_count >= self.config.max_batch_docs:
+                    logger.info(f"Reached batch limit of {self.config.max_batch_docs} processed documents")
+                    break
+                
                 # Parse document on demand
                 try:
                     doc = self.document_loader.parser.parse_file(file_path)
@@ -141,6 +147,10 @@ class PipelineOrchestrator:
                 # Update statistics
                 self._update_statistics(result)
                 
+                # Track processed count (excluding skipped documents)
+                if result.success and not result.skipped:
+                    processed_count += 1
+                
                 # Track consecutive failures
                 if result.success:
                     consecutive_failures = 0
@@ -161,7 +171,8 @@ class PipelineOrchestrator:
                 self.hook_registry.run_after_batch(
                     self.batch_entities,
                     self.graph_client,
-                    self.interactive_session
+                    self.interactive_session,
+                    namespace=self.config.namespace  # Pass namespace to hooks
                 )
             
             self.stats.end_time = datetime.now()
@@ -248,7 +259,8 @@ class PipelineOrchestrator:
                 entities = self.hook_registry.run_before_store(
                     doc,
                     entities,
-                    self.graph_client
+                    self.graph_client,
+                    self.interactive_session  # Pass interactive session to hooks
                 )
             
             # Ingest into graph (unless dry run)

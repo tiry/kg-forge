@@ -326,6 +326,32 @@ The pipeline command automates the entire knowledge graph construction process:
 5. **Links** documents to entities with MENTIONS relationships
 6. **Tracks** progress with real-time statistics
 
+### Automatic Neo4j Management
+
+🎯 **NEW**: The pipeline automatically manages Neo4j for you!
+
+**What happens:**
+1. Before pipeline starts: Checks if Neo4j is running
+2. If not running: Auto-starts Neo4j via docker-compose
+3. Waits for Neo4j to be ready (health check)
+4. Runs the pipeline
+5. After completion: Auto-stops Neo4j (if we started it)
+
+**Benefits:**
+- No manual `kg-forge db start` needed
+- No manual `kg-forge db stop` needed
+- Automatic cleanup on errors
+- Consistent development workflow
+
+**Manual override (if needed):**
+```bash
+# Start Neo4j manually first
+docker-compose up -d neo4j
+
+# Then run pipeline (won't auto-stop)
+kg-forge pipeline docs/
+```
+
 ### Pipeline Options
 
 ```bash
@@ -341,14 +367,56 @@ kg-forge pipeline docs/ --min-confidence 0.8
 # Skip already processed documents (hash-based)
 kg-forge pipeline docs/ --reprocess  # Force reprocess all
 
-# Batch size (process in batches)
+# Batch size (deprecated - internal batching)
 kg-forge pipeline docs/ --batch-size 20
+
+# 🆕 Maximum documents to process in this run
+kg-forge pipeline docs/ --max-batch-docs 10
 
 # Maximum consecutive failures before aborting
 kg-forge pipeline docs/ --max-failures 10
 
 # Dry run (test without writing to database)
 kg-forge pipeline docs/ --dry-run
+```
+
+### 🆕 Batch Processing Limit
+
+Control how many documents to process per pipeline run:
+
+```bash
+# Process only 10 documents (excludes skipped docs)
+kg-forge pipeline docs/ --max-batch-docs 10
+
+# Process 5 documents with interactive mode
+kg-forge pipeline docs/ --max-batch-docs 5 --interactive
+
+# No limit - process all documents (default)
+kg-forge pipeline docs/
+```
+
+**How it works:**
+- Only counts **successfully processed** documents
+- Skipped documents (already processed) don't count toward limit
+- Pipeline stops when limit is reached
+- Runs `after_batch` hooks before stopping (deduplication, etc.)
+
+**Use cases:**
+- **Incremental processing**: Process large corpus in chunks
+- **Cost control**: Limit LLM API calls per run
+- **Interactive curation**: Review small batches for quality
+- **Testing**: Quick validation with limited scope
+
+**Example workflow:**
+```bash
+# Day 1: Process first 20 documents
+kg-forge pipeline large-corpus/ --max-batch-docs 20 --interactive
+
+# Day 2: Process next 20 documents (auto-skips first 20)
+kg-forge pipeline large-corpus/ --max-batch-docs 20 --interactive
+
+# Day 3: Process remaining documents
+kg-forge pipeline large-corpus/
 ```
 
 ### Interactive Mode 🎯
@@ -367,44 +435,113 @@ kg-forge pipeline docs/ --biraj
 
 **What Interactive Mode Does:**
 
-When enabled, the pipeline will prompt you to:
+When enabled, the pipeline provides two levels of interactivity:
 
-1. **Merge similar entities**
-   ```
-   Found similar entities: "Catherine J." and "Katherine Jones"
-   Merge them? [Y/n]: y
-   Which name should be canonical? 
-     1. Catherine J.
-     2. Katherine Jones
-   Choice [2]: 2
-   ```
+#### 1. Per-Document Entity Review
 
-2. **Resolve ambiguous names**
-   ```
-   Found similar entities: "K8s" and "Kubernetes"
-   Merge them? [Y/n]: y
-   Canonical name: Kubernetes
-   ✓ Merged "K8s" → "Kubernetes"
-   ```
+Review and edit entities **as they're extracted** from each document:
 
-3. **Review entity normalization**
-   - See what automatic normalizations were applied
-   - Confirm or reject suggested merges
-   - Choose canonical names for merged entities
+**Display:**
+```
+Document: Content-Lake_3352431259 - Content Lake Overview
+Entities (5):
+1. product Data Platform (95%)
+2. technology Kubernetes (88%)
+3. component ML Pipeline (76%)
+4. technology PostgreSQL (92%)
+5. product Analytics Engine (85%)
 
-**When to Use Interactive Mode:**
+Review and edit these entities? [y/N]: y
+```
+
+**Commands:**
+```
+Actions:
+  • 'delete N' - Delete entity N
+  • 'edit N' - Edit entity N's name
+  • 'merge N M' - Merge entity N into M (same type only)
+  • 'done' - Finish review
+
+Command [done]: edit 2
+Editing: technology Kubernetes
+New name [Kubernetes]: K8s Cluster
+✓ Renamed: 'Kubernetes' → 'K8s Cluster'
+
+Command [done]: merge 3 1
+Merging: component 'ML Pipeline' → 'Data Platform'
+✓ Merged 'ML Pipeline' into 'Data Platform'
+
+Command [done]: delete 5
+✗ Deleted: product Analytics Engine
+
+Command [done]: done
+
+Review complete:
+  • Final count: 3
+  • Edited: 1
+  • Merged: 1
+  • Deleted: 1
+```
+
+**Features:**
+- **Number-based**: Easy selection by typing entity number
+- **Live updates**: See changes after each command
+- **Type safety**: Can't merge different entity types
+- **Undo-friendly**: Just re-run pipeline to reprocess
+
+#### 2. Global Entity Deduplication
+
+After all documents processed, find and merge similar entities **across the entire graph**:
+
+**Fuzzy Matching:**
+```
+⚙️  Running entity deduplication check for namespace 'default'...
+
+❓ Found 2 pair(s) of similar entities
+
+   📌 technology: 'K8s' ↔ 'Kubernetes' (similarity: 80%)
+   
+   Merge these entities? [Y/n]: y
+   Which name should be kept as canonical?
+     1. K8s
+     2. Kubernetes
+   [Kubernetes]: 2
+   
+   ✅ Merged 'K8s' → 'Kubernetes'
+   Updated 15 MENTIONS relationships
+
+   📌 person: 'Catherine J.' ↔ 'Katherine Jones' (similarity: 76%)
+   
+   Merge these entities? [Y/n]: n
+   ⏭️  Skipped merge
+
+📊 Deduplication complete:
+   • Merged: 1
+   • Skipped: 1
+```
+
+**How it works:**
+- Uses `difflib.SequenceMatcher` for similarity detection
+- 75% similarity threshold
+- Only compares entities of same type
+- Updates all MENTIONS relationships during merge
+- Deletes duplicate entities
+
+#### When to Use Interactive Mode:
 
 ✅ **Use --interactive for:**
-- First-time ingestion of important documents
-- Curating a production knowledge graph
-- When entity quality is critical
-- Building a golden dataset
+- ✅ First-time ingestion of important documents
+- ✅ Curating a production knowledge graph
+- ✅ When entity quality is critical
+- ✅ Building a golden dataset
+- ✅ Learning what entities are being extracted
 
 ❌ **Skip --interactive for:**
-- Batch processing large document sets
-- CI/CD pipelines (use default hooks automatically)
-- Quick testing or experimentation
-- Re-processing already curated data
+- ❌ Batch processing large document sets (>100 docs)
+- ❌ CI/CD pipelines (use default hooks automatically)
+- ❌ Quick testing or experimentation
+- ❌ Re-processing already curated data
+- ❌ When you trust the LLM extraction quality
 
 ### Dry Run Mode
 
@@ -439,6 +576,9 @@ kg-forge pipeline docs/ --dry-run --min-confidence 0.9
 📊 Min confidence: 0.0
 ♻️  Skip processed: Yes
 
+🔍 Checking Neo4j status...
+✅ Neo4j is already running
+
 ⚙️  Initializing components...
 ✅ Components initialized
 
@@ -449,19 +589,47 @@ kg-forge pipeline docs/ --dry-run --min-confidence 0.9
 [3/15 20.0%] SKIPPED Content-Model_3182532046.html: Already processed (hash match)
 [4/15 26.7%] PROCESSED Technology-Stack_3352234693.html: 6 entities in 3.92s
 ...
-[15/15 100.0%] PROCESSED Summary_3352234699.html: 4 entities in 2.81s
+[10/15 66.7%] PROCESSED Document-10.html: 4 entities in 2.81s
+Reached batch limit of 10 processed documents
+
+⚙️  Running entity deduplication check for namespace 'default'...
+✅ No similar entities detected
 
 📊 Pipeline Results
 📄 Total documents:     15
-✅ Processed:           12
+✅ Processed:           10
 ⏭️  Skipped:             3
 ❌ Failed:              0
 📈 Success rate:        100.0%
-🏷️  Total entities:      87
-🔗 Total relationships: 124
-⏱️  Duration:            58.42s
+🏷️  Total entities:      67
+🔗 Total relationships: 98
+⏱️  Duration:            45.12s
 
 ✨ Pipeline completed successfully!
+```
+
+**With Batch Limit:**
+```
+[8/15 53.3%] PROCESSED Document-8.html: 5 entities in 3.12s
+[9/15 60.0%] PROCESSED Document-9.html: 7 entities in 4.01s
+[10/15 66.7%] PROCESSED Document-10.html: 4 entities in 2.93s
+Reached batch limit of 10 processed documents
+
+⚙️  Running entity deduplication...
+```
+
+**With Auto Neo4j Start:**
+```
+🔍 Checking Neo4j status...
+⚠️  Neo4j is not running. Starting Neo4j...
+⚙️  Starting Neo4j container...
+⏳ Waiting for Neo4j to be ready...
+✅ Neo4j is ready and accepting connections
+
+...pipeline runs...
+
+🛑 Stopping Neo4j (started by pipeline)...
+✅ Neo4j stopped successfully
 ```
 
 **With Errors:**
@@ -507,25 +675,40 @@ kg-forge pipeline confluence-docs/ \
   --max-failures 3
 ```
 
+**Incremental Processing with Batch Limit:**
+
+```bash
+# Process 20 documents per day with review
+kg-forge pipeline large-corpus/ \
+  --max-batch-docs 20 \
+  --interactive \
+  --namespace production
+
+# Run daily - automatically skips processed docs
+# Day 1: Processes docs 1-20
+# Day 2: Processes docs 21-40 (skips 1-20)
+# Day 3: Processes docs 41-60 (skips 1-40)
+```
+
 **Quick Test Run:**
 
 ```bash
-# Test extraction without database writes
+# Test extraction on 5 documents without database writes
 kg-forge pipeline test-docs/ \
   --dry-run \
+  --max-batch-docs 5 \
   --types Product \
   --min-confidence 0.9
 ```
 
-**Batch Processing:**
+**Controlled Interactive Review:**
 
 ```bash
-# Process large document sets efficiently
-kg-forge pipeline large-corpus/ \
-  --namespace archive \
-  --batch-size 50 \
-  --skip-processed \
-  --max-failures 10
+# Review small batches for quality assurance
+kg-forge pipeline docs/ \
+  --max-batch-docs 10 \
+  --interactive \
+  --min-confidence 0.8
 ```
 
 **Re-process with Higher Quality:**
@@ -869,7 +1052,7 @@ kg-forge --version
 
 ## See Also
 
-- [README.md](README.md) - Project overview and installation
+- [README.md](ReadMe.md) - Project overview and installation
 - [Install.md](Install.md) - Detailed installation instructions
 - [Dev.md](Dev.md) - Development setup and testing
 - [specs/](specs/) - Technical specifications

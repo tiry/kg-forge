@@ -15,6 +15,7 @@ class PipelineConfig:
     min_confidence: float = 0.0
     skip_processed: bool = True
     batch_size: int = 10
+    max_batch_docs: Optional[int] = None  # Max processed docs (None = all docs)
     max_failures: int = 5
     interactive: bool = False  # Enable interactive mode for human-in-the-loop
     dry_run: bool = False  # Extract but don't write to graph
