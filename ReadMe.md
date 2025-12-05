@@ -215,12 +215,14 @@ kg-forge render --out custom_graph.html --depth 3 --max-nodes 200
 
 #### Database Operations
 
+All database operations are managed through the `db` command group:
+
 ```bash
 # Start Neo4j database (via Docker)
-kg-forge neo4j-start
+kg-forge db start
 
 # Stop Neo4j database
-kg-forge neo4j-stop
+kg-forge db stop
 
 # Initialize database schema
 kg-forge db init
@@ -235,6 +237,8 @@ kg-forge db clear --namespace test --confirm
 # Export entities from graph to markdown files
 kg-forge export-entities --output-dir custom_entities/
 ```
+
+For detailed database command examples, see [Usage.md](Usage.md#database-operations).
 
 ### Configuration Options
 

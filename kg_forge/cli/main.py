@@ -11,7 +11,6 @@ from kg_forge.cli.ingest import ingest
 from kg_forge.cli.parse import parse_html
 from kg_forge.cli.query import query
 from kg_forge.cli.render import render
-from kg_forge.cli.neo4j_ops import neo4j_start, neo4j_stop, export_entities
 from kg_forge.cli.entities import entities
 from kg_forge.cli.db import db_group
 from kg_forge.cli.extract import extract
@@ -75,11 +74,8 @@ cli.add_command(parse_html)
 cli.add_command(extract)
 cli.add_command(query)
 cli.add_command(render)
-cli.add_command(neo4j_start)
-cli.add_command(neo4j_stop)
-cli.add_command(export_entities)
 cli.add_command(entities)
-cli.add_command(db_group)
+cli.add_command(db_group)  # Database management (start, stop, init, status, clear)
 
 
 def main() -> None:

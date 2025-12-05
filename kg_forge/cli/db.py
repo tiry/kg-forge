@@ -1,6 +1,8 @@
 """Database management CLI commands."""
 
 import click
+import subprocess
+import time
 from rich.console import Console
 from rich.table import Table
 from rich import box
@@ -19,6 +21,102 @@ console = Console()
 def db_group():
     """Database management commands."""
     pass
+
+
+@db_group.command(name="start")
+def start_database():
+    """
+    Start Neo4j database instance using docker-compose.
+    
+    This command starts Neo4j in a Docker container and waits for it
+    to be ready for connections.
+    """
+    console.print("[blue]Starting Neo4j database with docker-compose...[/blue]")
+    
+    try:
+        # Start Neo4j using docker-compose
+        result = subprocess.run(
+            ["docker-compose", "up", "-d", "neo4j"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        console.print("[green]✓[/green] Neo4j container started")
+        
+        # Wait for Neo4j to be ready
+        console.print("[blue]Waiting for Neo4j to be ready...[/blue]")
+        max_wait = 30  # seconds
+        waited = 0
+        
+        while waited < max_wait:
+            try:
+                # Check if Neo4j is responding
+                health_check = subprocess.run(
+                    ["docker", "exec", "kg-forge-neo4j", "wget", "--spider", "-q", "http://localhost:7474"],
+                    capture_output=True,
+                    timeout=2
+                )
+                if health_check.returncode == 0:
+                    settings = get_settings()
+                    console.print(f"[green]✓[/green] Neo4j is ready at {settings.neo4j.uri}")
+                    console.print(f"[blue]Browser UI:[/blue] http://localhost:7474")
+                    console.print(f"[blue]Credentials:[/blue] neo4j / password")
+                    return
+            except subprocess.TimeoutExpired:
+                pass
+            
+            time.sleep(2)
+            waited += 2
+            console.print(f"[yellow].[/yellow]", end="")
+        
+        console.print(f"\n[yellow]⚠[/yellow] Neo4j started but may still be initializing")
+        console.print(f"[blue]Check status with:[/blue] docker logs kg-forge-neo4j")
+        
+    except FileNotFoundError:
+        console.print("[red]✗ docker-compose not found[/red]")
+        console.print("Please install Docker and docker-compose")
+        raise click.Abort()
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]✗ Failed to start Neo4j:[/red] {e.stderr}")
+        raise click.Abort()
+    except Exception as e:
+        console.print(f"[red]✗ Unexpected error:[/red] {e}")
+        raise click.Abort()
+
+
+@db_group.command(name="stop")
+def stop_database():
+    """
+    Stop Neo4j database instance using docker-compose.
+    
+    This command cleanly stops the Neo4j Docker container.
+    """
+    console.print("[blue]Stopping Neo4j database...[/blue]")
+    
+    try:
+        # Stop Neo4j using docker-compose
+        result = subprocess.run(
+            ["docker-compose", "stop", "neo4j"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        console.print("[green]✓[/green] Neo4j container stopped")
+        console.print("[blue]Data is preserved in Docker volumes[/blue]")
+        console.print("[blue]To remove data:[/blue] docker-compose down -v")
+        
+    except FileNotFoundError:
+        console.print("[red]✗ docker-compose not found[/red]")
+        console.print("Please install Docker and docker-compose")
+        raise click.Abort()
+    except subprocess.CalledProcessError as e:
+        console.print(f"[red]✗ Failed to stop Neo4j:[/red] {e.stderr}")
+        raise click.Abort()
+    except Exception as e:
+        console.print(f"[red]✗ Unexpected error:[/red] {e}")
+        raise click.Abort()
 
 
 @db_group.command(name="init")

@@ -772,22 +772,50 @@ kg-forge pipeline docs/ --reprocess
 
 ## Database Operations
 
-Manage the Neo4j database lifecycle.
+Manage the Neo4j database lifecycle using the `db` command group.
 
 ### Start Database
 
 ```bash
 # Start Neo4j using Docker Compose
 kg-forge db start
-
-# Auto-detects Rancher Desktop if available
-# Falls back to Docker Desktop
 ```
 
-The database will be available at:
+The command will:
+1. Start Neo4j container using docker-compose
+2. Wait for Neo4j to be ready (up to 30 seconds)
+3. Display connection information
+
+**Output:**
+```
+✓ Neo4j container started
+✓ Neo4j is ready at bolt://localhost:7687
+Browser UI: http://localhost:7474
+Credentials: neo4j / password
+```
+
+**Connection Details:**
 - Bolt: `bolt://localhost:7687`
-- HTTP: `http://localhost:7474`
-- Browser: `http://localhost:7474/browser/`
+- Browser UI: `http://localhost:7474`
+- Username: `neo4j`
+- Password: `password`
+- Container: `kg-forge-neo4j`
+
+### Stop Database
+
+```bash
+# Stop the Neo4j container
+kg-forge db stop
+```
+
+**Output:**
+```
+✓ Neo4j container stopped
+Data is preserved in Docker volumes
+To remove data: docker-compose down -v
+```
+
+**Note:** Data persists in Docker volumes even after stopping.
 
 ### Initialize Database
 
@@ -797,30 +825,71 @@ kg-forge db init
 
 # Initialize with custom namespace
 kg-forge db init --namespace production
+
+# Clear existing data and reinitialize
+kg-forge db init --drop-existing
 ```
 
-Creates:
-- Unique constraints on entity and document IDs
-- Indexes for performance
-- Namespace isolation
+**What it does:**
+- Creates unique constraints on entity and document IDs
+- Creates indexes for performance
+- Optionally clears namespace data
 
-### Stop Database
+### Check Database Status
 
 ```bash
-# Stop the database
+# Check if Neo4j is running and show stats
+kg-forge db status
+
+# Show statistics for a specific namespace
+kg-forge db status --namespace production
+```
+
+**Output:**
+```
+✓ Connected to Neo4j at bolt://localhost:7687
+
+Schema Status:
+  ✓ All constraints and indexes present
+
+Database Statistics:
+  Total Nodes: 1,245
+  
+  Specify a namespace to see detailed statistics
+```
+
+### Clear Namespace Data
+
+```bash
+# Clear all data for a specific namespace (interactive)
+kg-forge db clear --namespace production
+
+# Clear with automatic confirmation
+kg-forge db clear --namespace test --confirm
+```
+
+**Warning:** This deletes all nodes and relationships for the specified namespace!
+
+### Complete Database Workflow
+
+```bash
+# 1. Start Neo4j
+kg-forge db start
+
+# 2. Initialize schema
+kg-forge db init
+
+# 3. Check status
+kg-forge db status
+
+# 4. Run pipeline to populate data
+kg-forge pipeline docs/
+
+# 5. Check statistics
+kg-forge db status --namespace default
+
+# 6. Stop when done
 kg-forge db stop
-
-# Data persists in Docker volumes
-```
-
-### Reset Database
-
-```bash
-# WARNING: Deletes all data!
-kg-forge db reset
-
-# With confirmation
-kg-forge db reset --yes
 ```
 
 ---

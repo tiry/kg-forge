@@ -146,3 +146,161 @@ def test_content_hash_consistency(parser, test_data_dir):
     doc2 = parser.parse_file(test_file)
 
     assert doc1.content_hash == doc2.content_hash
+
+
+def test_title_stripping_with_site_prefix(parser, tmp_path):
+    """Test that site name prefix is stripped from titles."""
+    html_content = """
+    <html>
+    <head>
+        <title>Hyland Confluence:Content Lake Overview</title>
+    </head>
+    <body>
+        <div id="main-content">
+            <h1 id="title-heading">
+                <span id="title-text">Hyland Confluence:Content Lake Overview</span>
+            </h1>
+            <p>Test content</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    test_file = tmp_path / "test.html"
+    test_file.write_text(html_content)
+    
+    doc = parser.parse_file(test_file)
+    
+    assert doc.title == "Content Lake Overview"
+    assert "Hyland Confluence" not in doc.title
+
+
+def test_title_stripping_with_multiple_colons(parser, tmp_path):
+    """Test titles with multiple colons keep everything after first."""
+    html_content = """
+    <html>
+    <head>
+        <title>Site Name:Page Title:Subtitle</title>
+    </head>
+    <body>
+        <div id="main-content">
+            <h1 id="title-heading">
+                <span id="title-text">Site Name:Page Title:Subtitle</span>
+            </h1>
+            <p>Test content</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    test_file = tmp_path / "test.html"
+    test_file.write_text(html_content)
+    
+    doc = parser.parse_file(test_file)
+    
+    assert doc.title == "Page Title:Subtitle"
+
+
+def test_title_without_colon_unchanged(parser, tmp_path):
+    """Test titles without colon are unchanged."""
+    html_content = """
+    <html>
+    <head>
+        <title>Simple Page Title</title>
+    </head>
+    <body>
+        <div id="main-content">
+            <h1 id="title-heading">
+                <span id="title-text">Simple Page Title</span>
+            </h1>
+            <p>Test content</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    test_file = tmp_path / "test.html"
+    test_file.write_text(html_content)
+    
+    doc = parser.parse_file(test_file)
+    
+    assert doc.title == "Simple Page Title"
+
+
+def test_title_from_h1_fallback(parser, tmp_path):
+    """Test extraction from h1#title-heading when no span present."""
+    html_content = """
+    <html>
+    <head>
+        <title>Other Title</title>
+    </head>
+    <body>
+        <div id="main-content">
+            <h1 id="title-heading">Engineering Docs:System Architecture</h1>
+            <p>Test content</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    test_file = tmp_path / "test.html"
+    test_file.write_text(html_content)
+    
+    doc = parser.parse_file(test_file)
+    
+    # Should use h1 and strip site prefix
+    assert doc.title == "System Architecture"
+
+
+def test_title_edge_case_colon_at_end(parser, tmp_path):
+    """Test title with colon at end keeps original title."""
+    html_content = """
+    <html>
+    <head>
+        <title>Site Name:</title>
+    </head>
+    <body>
+        <div id="main-content">
+            <h1 id="title-heading">
+                <span id="title-text">Site Name:</span>
+            </h1>
+            <p>Test content</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    test_file = tmp_path / "test.html"
+    test_file.write_text(html_content)
+    
+    doc = parser.parse_file(test_file)
+    
+    # Empty string after colon means no page name, keep original
+    # (More informative than "Untitled Document")
+    assert doc.title == "Site Name:"
+
+
+def test_title_edge_case_colon_at_start(parser, tmp_path):
+    """Test title with colon at start."""
+    html_content = """
+    <html>
+    <head>
+        <title>:Weird Title</title>
+    </head>
+    <body>
+        <div id="main-content">
+            <h1 id="title-heading">
+                <span id="title-text">:Weird Title</span>
+            </h1>
+            <p>Test content</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    test_file = tmp_path / "test.html"
+    test_file.write_text(html_content)
+    
+    doc = parser.parse_file(test_file)
+    
+    assert doc.title == "Weird Title"

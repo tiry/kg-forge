@@ -392,40 +392,74 @@ Ingest commands must set namespace on all created nodes and relationships; query
 
 The first step is to build an implementation plan that decompose the work into steps that allow to test / verify / adjust the spec.
 
-Typically, we could consider:
+### Implementation Steps
 
- - 1: implement the CLI logic 
+ - **Step 1: CLI Foundation** ✅ COMPLETED
    - cmd parsing, help, config loading 
    - unit tests
    - readme file
    - no actual processing or LLM calls
- - 2: implement data curation part
+   
+ - **Step 2: HTML Parsing and Document Model** ✅ COMPLETED
+   - implement data curation part
    - generate some test data
    - test that parsing is clean
- - 3: load entities definitions
-   - load entitie definition from markdown files
+   - document model with content hashing
+   
+ - **Step 3: Entity Definitions Loading** ✅ COMPLETED
+   - load entity definitions from markdown files
    - unit tests   
-   - add CLI command to load entities and print in the stdout
- - 4: neo4j bootstrap
+   - add CLI command to load entities and print in stdout
+   - template merging for prompts
+   
+ - **Step 4: Neo4j Bootstrap** ✅ COMPLETED
    - Connects to Neo4j and init data and schemas
    - add CLI command to create db and init graph with loaded entities  
    - unit tests (use docker and a pytest fixture)
-   - implenent CLI basic queries
- - 5: plug LLM
+   - implement CLI basic queries
+   - namespace support
+   
+ - **Step 5: LLM Integration** ✅ COMPLETED
    - implement and test the prompt generation
    - implement the parsing logic
    - generate test data to be able to test without LLM
-   - implement the call to BedRock
+   - implement the call to Bedrock and OpenRouter
    - add CLI command to test calling model with sample data
- - 6: ingest pipeline
-   - implement the ingestion pipeline : read - extract entities - store in kg
+   - retry logic and error handling
+   
+ - **Step 6: Data Pipeline** ✅ COMPLETED
+   - implement the ingestion pipeline: read - extract entities - store in KG
    - end-to-end test with fake LLM calls 
-   - at this point we are likely to also refine the query
- - 7: Rendering
-   - implement the redering 
- - 8: We will update the plan when we get there
+   - hook system for extensibility
+   - interactive mode support
+   - pipeline orchestration
+   
+ - **Step 7: Miscellaneous Fixes and Test Coverage** ✅ COMPLETED
+   - fix Confluence HTML title format issue
+   - consolidate database commands
+   - improve test coverage from 72% to 75%
+   - add 74 new tests across 6 modules
+   - comprehensive testing for CLI, repositories, and hooks
+   
+ - **Step 8: Rendering** (Not implemented yet)
+   - implement the rendering using neovis.js
+   - generate HTML visualization
+   
+ - **Future Steps**
+   - We will update the plan as we learn more
+
+### Completed Specifications
+
+1. `01-cli-foundation.md` - CLI structure and commands
+2. `02-html-parsing-and-document-model.md` - HTML parsing and document processing
+3. `03-entity-definitions-loading.md` - Entity schema loading
+4. `04-neo4j-bootstrap.md` - Neo4j setup and schema
+5. `05-llm-integration.md` - LLM extractors and prompts
+6. `06-data-pipeline.md` - Pipeline orchestration and hooks
+7. `07-misc-fixes.md` - Bug fixes and test improvements
+
+### Development Guidelines
 
 For each step, I want you to write a detailed spec, ask clarifying questions, let me review the new spec and then implement.
 
 We should not move to the next step until I explicitly ask to do so.
-

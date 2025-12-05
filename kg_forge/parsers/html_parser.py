@@ -86,28 +86,43 @@ class ConfluenceHTMLParser:
     def _extract_title(self, soup: BeautifulSoup) -> str:
         """
         Extract document title from HTML.
+        
+        Confluence HTML exports format titles as: "Site Name:Page Name"
+        This method strips the site name prefix to keep only the page name.
 
         Args:
             soup: BeautifulSoup object
 
         Returns:
-            Document title
+            Document title (with site prefix removed if present)
         """
+        title = ""
+        
         # Try to find title in h1#title-heading
         title_elem = soup.find("h1", id="title-heading")
         if title_elem:
             # Get text from span#title-text if available
             title_text = title_elem.find("span", id="title-text")
             if title_text:
-                return title_text.get_text(strip=True)
-            return title_elem.get_text(strip=True)
-
-        # Fallback to <title> tag
-        title_tag = soup.find("title")
-        if title_tag:
-            return title_tag.get_text(strip=True)
-
-        return "Untitled Document"
+                title = title_text.get_text(strip=True)
+            else:
+                title = title_elem.get_text(strip=True)
+        else:
+            # Fallback to <title> tag
+            title_tag = soup.find("title")
+            if title_tag:
+                title = title_tag.get_text(strip=True)
+            else:
+                return "Untitled Document"
+        
+        # Strip site name prefix (format: "Site Name:Page Name")
+        # Only split on first colon to handle titles with multiple colons
+        if ':' in title:
+            parts = title.split(':', 1)
+            if len(parts) == 2 and parts[1].strip():
+                title = parts[1].strip()
+        
+        return title if title else "Untitled Document"
 
     def _extract_breadcrumb(self, soup: BeautifulSoup) -> List[str]:
         """
