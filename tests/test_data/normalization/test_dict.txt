@@ -1,0 +1,6 @@
+# Test normalization dictionary
+# Format: ABBREVIATION : Full Form
+
+K8S : Kubernetes
+ML : Machine Learning
+AI : Artificial Intelligence

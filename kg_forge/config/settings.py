@@ -29,6 +29,20 @@ class GraphConfig(BaseModel):
     backend: str = Field(default="neo4j")
 
 
+class PipelineConfig(BaseModel):
+    """Pipeline normalization and deduplication configuration."""
+    normalization_dict_path: str = Field(default="config/normalization_dict.txt")
+    fuzzy_threshold: float = Field(default=0.85)
+    
+    @field_validator('fuzzy_threshold')
+    @classmethod
+    def validate_fuzzy_threshold(cls, v):
+        """Validate fuzzy matching threshold is between 0 and 1."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("Fuzzy threshold must be between 0.0 and 1.0")
+        return v
+
+
 class AppConfig(BaseModel):
     """Application configuration."""
     log_level: str = Field(default="INFO")
@@ -57,6 +71,7 @@ class Settings(BaseModel):
     neo4j: Neo4jConfig = Field(default_factory=Neo4jConfig)
     aws: AWSConfig = Field(default_factory=AWSConfig)
     graph: GraphConfig = Field(default_factory=GraphConfig)
+    pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     app: AppConfig = Field(default_factory=AppConfig)
 
     @classmethod

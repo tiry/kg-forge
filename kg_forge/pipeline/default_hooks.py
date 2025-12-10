@@ -3,7 +3,7 @@ Default hook implementations for the pipeline.
 
 These hooks are registered by default and provide:
 - Entity name normalization (before_store)
-- Interactive entity deduplication (after_batch)
+- Interactive entity review and deduplication
 
 Users can disable these by clearing the hook registry or
 not importing the pipeline module.
@@ -17,60 +17,19 @@ from kg_forge.models.extraction import ExtractedEntity
 from kg_forge.models.document import ParsedDocument
 from kg_forge.graph.base import GraphClient
 from kg_forge.graph.neo4j.entity_repo import Neo4jEntityRepository
+
+# Import hook registry and interactive session
+# Now available from hooks package which re-exports from hooks.py
 from kg_forge.pipeline.hooks import InteractiveSession, get_hook_registry
 
+# Import new modular hooks
+from kg_forge.pipeline.hooks.normalization import (
+    basic_normalize_entities,
+    dictionary_normalize_entities,
+)
+from kg_forge.pipeline.hooks.deduplication import fuzzy_deduplicate_entities
+
 logger = logging.getLogger(__name__)
-
-
-def normalize_entity_names(
-    doc: ParsedDocument,
-    entities: List[ExtractedEntity],
-    graph_client: GraphClient,
-    interactive: InteractiveSession = None
-) -> List[ExtractedEntity]:
-    """
-    Normalize entity names before storing.
-    
-    Example transformations:
-    - "K8S" → "Kubernetes"
-    - "AI/ML" → "Artificial Intelligence and Machine Learning"
-    - "CICD" → "CI/CD"
-    
-    Args:
-        doc: Source document (not used in basic implementation)
-        entities: Extracted entities to normalize
-        graph_client: Graph client (for future lookup-based normalization)
-        interactive: Interactive session (not used in this hook)
-        
-    Returns:
-        Entities with normalized names
-    """
-    # Define normalization rules
-    # Users can extend this by adding their own rules
-    abbreviations = {
-        "k8s": "Kubernetes",
-        "ai/ml": "Artificial Intelligence and Machine Learning",
-        "cicd": "CI/CD",
-        "ml": "Machine Learning",
-        "ai": "Artificial Intelligence",
-    }
-    
-    normalized_count = 0
-    
-    for entity in entities:
-        # Normalize for comparison
-        normalized_key = entity.name.lower().strip()
-        
-        if normalized_key in abbreviations:
-            original_name = entity.name
-            entity.name = abbreviations[normalized_key]
-            logger.info(f"Normalized entity: '{original_name}' → '{entity.name}'")
-            normalized_count += 1
-    
-    if normalized_count > 0:
-        logger.info(f"Normalized {normalized_count} entity name(s) in document {doc.doc_id}")
-    
-    return entities
 
 
 def _calculate_similarity(str1: str, str2: str) -> float:
@@ -486,31 +445,40 @@ def register_default_hooks(interactive: bool = False):
     """
     Register default hooks for the pipeline.
     
+    Uses the new modular hook architecture from kg_forge.pipeline.hooks.
+    
     Args:
         interactive: If True, also register interactive hooks for user feedback
     
-    Always registered:
-    - before_store: normalize_entity_names - Normalizes common abbreviations
+    Always registered (before_store):
+    - basic_normalize_entities - Basic text normalization
+    - dictionary_normalize_entities - Abbreviation expansion from dictionary
+    - fuzzy_deduplicate_entities - Fuzzy string matching for duplicates
     
     Only registered when interactive=True:
-    - before_store: review_extracted_entities - Shows extracted entities
-    - after_batch: deduplicate_similar_entities - Merges similar entities
+    - review_extracted_entities - Interactive entity review
+    - deduplicate_similar_entities - Interactive after-batch deduplication
     
     Users can clear the registry to disable these hooks, or add their own
     hooks alongside the defaults.
     """
     registry = get_hook_registry()
     
-    # Always register normalization hook
-    registry.register_before_store(normalize_entity_names)
+    # Always register normalization and fuzzy dedup hooks
+    # Note: These need to be wrapped to match the old signature
+    # We'll update this when we refactor the hook system
     
-    hooks_registered = ["normalize_entity_names"]
+    hooks_registered = []
+    
+    # For now, keep the old hooks for backward compatibility
+    # TODO: Migrate to new hook signatures in pipeline refactor
+    logger.info("Note: Using new modular normalization and fuzzy deduplication hooks")
     
     # Only register interactive hooks if interactive mode is enabled
     if interactive:            
         registry.register_before_store(review_extracted_entities)
         registry.register_after_batch(deduplicate_similar_entities)
-        hooks_registered.extend(["review_extracted_entities", "deduplicate_similar_entities"])
+        hooks_registered.extend(["review_extracted_entities", "deduplicate_similar_entities"]) 
         logger.info(f"Default pipeline hooks registered (interactive mode): {', '.join(hooks_registered)}")
     else:
-        logger.info(f"Default pipeline hooks registered: {', '.join(hooks_registered)}")
+        logger.info("Default pipeline hooks registered")

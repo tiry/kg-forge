@@ -4,6 +4,8 @@
 An engineering team is a stable group of engineers with a shared name and mission
 (e.g. "KD team", "Platform Engineering", "AI Safety guild").
 
+The team should not be a single person. We could reference a team by it's leader name like "Donovan Kidd's team" or "Damien's team" - but these teams are likely to have a "real name".
+
 Extract an "engineering_team" when:
 - The text references a named team or group responsible for a product, component, or workstream.
 

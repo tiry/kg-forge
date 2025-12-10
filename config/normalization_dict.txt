@@ -1,0 +1,171 @@
+# Entity Normalization Dictionary
+#
+# Format: KEY : Expanded Value
+#
+# This file defines abbreviations and alternative names that should be
+# normalized to their canonical form. Keys are matched case-insensitively
+# after basic normalization (lowercase, remove special chars).
+#
+# Example:
+#   K8S : Kubernetes
+#   ML : Machine Learning
+
+# Knowledge Graph & Discovery
+KD : Knowledge Discovery
+KG : Knowledge Graph
+KE : Knowledge Enrichment
+CI : Content Intelligence
+
+# Machine Learning & AI
+ML : Machine Learning
+AI : Artificial Intelligence
+LLM : Large Language Model
+NLP : Natural Language Processing
+RAG : Retrieval Augmented Generation
+AI/ML : Artificial Intelligence Machine Learning
+AIML : Artificial Intelligence Machine Learning
+DL : Deep Learning
+NN : Neural Network
+CNN : Convolutional Neural Network
+RNN : Recurrent Neural Network
+GAN : Generative Adversarial Network
+
+# Cloud & Infrastructure  
+K8S : Kubernetes
+K8 : Kubernetes
+AWS : Amazon Web Services
+GCP : Google Cloud Platform
+Azure : Microsoft Azure
+VM : Virtual Machine
+VPC : Virtual Private Cloud
+CDN : Content Delivery Network
+S3 : Simple Storage Service
+EC2 : Elastic Compute Cloud
+ECS : Elastic Container Service
+EKS : Elastic Kubernetes Service
+Lambda : AWS Lambda
+IAC : Infrastructure as Code
+
+# Development & CI/CD
+CI/CD : Continuous Integration Continuous Deployment
+CD : Continuous Deployment
+QA : Quality Assurance
+DevOps : Development Operations
+SRE : Site Reliability Engineering
+TDD : Test Driven Development
+BDD : Behavior Driven Development
+DDD : Domain Driven Design
+CICD : Continuous Integration Continuous Deployment
+
+# Version Control & Repository
+VCS : Version Control System
+SCM : Source Code Management
+PR : Pull Request
+MR : Merge Request
+GH : GitHub
+GL : GitLab
+BB : Bitbucket
+
+# API & Web Technologies
+REST : Representational State Transfer
+API : Application Programming Interface
+HTTP : Hypertext Transfer Protocol
+HTTPS : HTTP Secure
+JSON : JavaScript Object Notation
+XML : Extensible Markup Language
+YAML : YAML Ain't Markup Language
+GraphQL : Graph Query Language
+gRPC : gRPC Remote Procedure Call
+SOAP : Simple Object Access Protocol
+SDK : Software Development Kit
+CLI : Command Line Interface
+GUI : Graphical User Interface
+SPA : Single Page Application
+SSR : Server Side Rendering
+CSR : Client Side Rendering
+
+# Database & Data
+DB : Database
+SQL : Structured Query Language
+NoSQL : Not Only SQL
+RDBMS : Relational Database Management System
+ORM : Object Relational Mapping
+ACID : Atomicity Consistency Isolation Durability
+ETL : Extract Transform Load
+DW : Data Warehouse
+DL : Data Lake
+KV : Key Value
+OLTP : Online Transaction Processing
+OLAP : Online Analytical Processing
+
+# Software Architecture
+SOA : Service Oriented Architecture
+MSA : Microservices Architecture
+MVC : Model View Controller
+MVVM : Model View ViewModel
+MVP : Model View Presenter
+CQRS : Command Query Responsibility Segregation
+DI : Dependency Injection
+IOC : Inversion of Control
+
+# Security
+IAM : Identity and Access Management
+SSO : Single Sign On
+MFA : Multi Factor Authentication
+RBAC : Role Based Access Control
+OAuth : Open Authorization
+JWT : JSON Web Token
+TLS : Transport Layer Security
+SSL : Secure Sockets Layer
+CORS : Cross Origin Resource Sharing
+XSS : Cross Site Scripting
+CSRF : Cross Site Request Forgery
+SQL Injection : SQL Injection Attack
+DOS : Denial of Service
+DDOS : Distributed Denial of Service
+
+# Testing
+UT : Unit Test
+IT : Integration Test
+E2E : End to End
+UAT : User Acceptance Testing
+A/B : A B Testing
+QA : Quality Assurance
+SQA : Software Quality Assurance
+
+# Monitoring & Observability
+APM : Application Performance Monitoring
+SLI : Service Level Indicator
+SLO : Service Level Objective
+SLA : Service Level Agreement
+MTTR : Mean Time To Recovery
+MTBF : Mean Time Between Failures
+RTO : Recovery Time Objective
+RPO : Recovery Point Objective
+
+# Messaging & Events
+MQ : Message Queue
+PubSub : Publish Subscribe
+Event Driven : Event Driven Architecture
+EDA : Event Driven Architecture
+AMQP : Advanced Message Queuing Protocol
+MQTT : Message Queuing Telemetry Transport
+
+# Product Names (example - customize for your domain)
+CFS : Content Foundation Services
+IDP : Intelligent Document Processing
+OCR : Optical Character Recognition
+CMS : Content Management System
+DAM : Digital Asset Management
+ECM : Enterprise Content Management
+DMS : Document Management System
+
+# Engineering Domains
+BE : Backend Engineering
+FE : Frontend Engineering
+FS : Full Stack
+UI/UX : User Interface User Experience
+UI : User Interface
+UX : User Experience
+DevEx : Developer Experience
+DX : Developer Experience

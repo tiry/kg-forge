@@ -441,7 +441,16 @@ The first step is to build an implementation plan that decompose the work into s
    - add 74 new tests across 6 modules
    - comprehensive testing for CLI, repositories, and hooks
    
- - **Step 8: Rendering** (Not implemented yet)
+ - **Step 8: Entity Normalization and Deduplication** ⏳ NOT STARTED
+   - basic text normalization (lowercase, trim, remove special chars)
+   - dictionary-based normalization (abbreviation expansion)
+   - fuzzy deduplication using Jellyfish
+   - vector-based deduplication using BERT embeddings
+   - interactive deduplication UI
+   - alias storage and management
+   - Neo4j vector index integration
+   
+ - **Step 9: Rendering** (Not implemented yet)
    - implement the rendering using neovis.js
    - generate HTML visualization
    
@@ -450,13 +459,14 @@ The first step is to build an implementation plan that decompose the work into s
 
 ### Completed Specifications
 
-1. `01-cli-foundation.md` - CLI structure and commands
-2. `02-html-parsing-and-document-model.md` - HTML parsing and document processing
-3. `03-entity-definitions-loading.md` - Entity schema loading
-4. `04-neo4j-bootstrap.md` - Neo4j setup and schema
-5. `05-llm-integration.md` - LLM extractors and prompts
-6. `06-data-pipeline.md` - Pipeline orchestration and hooks
-7. `07-misc-fixes.md` - Bug fixes and test improvements
+1. `01-cli-foundation.md` - CLI structure and commands ✅
+2. `02-html-parsing-and-document-model.md` - HTML parsing and document processing ✅
+3. `03-entity-definitions-loading.md` - Entity schema loading ✅
+4. `04-neo4j-bootstrap.md` - Neo4j setup and schema ✅
+5. `05-llm-integration.md` - LLM extractors and prompts ✅
+6. `06-data-pipeline.md` - Pipeline orchestration and hooks ✅
+7. `07-misc-fixes.md` - Bug fixes and test improvements ✅
+8. `08-entity-normalization-deduplication.md` - Entity normalization and deduplication ⏳
 
 ### Development Guidelines
 
