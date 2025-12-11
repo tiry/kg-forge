@@ -402,6 +402,115 @@ class Neo4jEntityRepository(EntityRepository):
             logger.error(f"Failed to create relationship: {e}")
             raise GraphError(f"Failed to create relationship: {e}")
     
+    def vector_search(
+        self,
+        entity_type: str,
+        embedding: List[float],
+        namespace: str,
+        limit: int = 5,
+        threshold: float = 0.85
+    ) -> List[Dict[str, Any]]:
+        """
+        Find similar entities using Neo4j vector index.
+        
+        Args:
+            entity_type: Type of entities to search
+            embedding: Query embedding vector
+            namespace: Entity namespace
+            limit: Maximum number of results
+            threshold: Minimum cosine similarity score
+            
+        Returns:
+            List of similar entities sorted by similarity (as dicts with 'similarity_score' added)
+        """
+        query = """
+        CALL db.index.vector.queryNodes(
+            'entity_embeddings',
+            $limit,
+            $embedding
+        ) YIELD node, score
+        WHERE node.entity_type = $entity_type
+          AND node.namespace = $namespace
+          AND score >= $threshold
+          AND node.embedding IS NOT NULL
+        RETURN node, score
+        ORDER BY score DESC
+        """
+        
+        params = {
+            "limit": limit,
+            "embedding": embedding,
+            "entity_type": entity_type,
+            "namespace": namespace,
+            "threshold": threshold
+        }
+        
+        try:
+            result = self.client.execute_query(query, params)
+            
+            entities = []
+            for record in result:
+                node_data = dict(record['node'])
+                node_data['similarity_score'] = record['score']
+                entities.append(node_data)
+            
+            return entities
+            
+        except Exception as e:
+            logger.error(f"Vector search failed: {e}")
+            return []
+    
+    def update_entity_embedding(
+        self,
+        namespace: str,
+        entity_type: str,
+        name: str,
+        embedding: List[float]
+    ) -> bool:
+        """
+        Update entity's embedding vector.
+        
+        Args:
+            namespace: Namespace for isolation
+            entity_type: Type of entity
+            name: Entity name
+            embedding: Embedding vector
+            
+        Returns:
+            bool: True if entity was updated, False if not found
+        """
+        normalized_name = self.normalize_name(name)
+        
+        query = """
+        MATCH (e:Entity {
+            namespace: $namespace,
+            entity_type: $entity_type,
+            normalized_name: $normalized_name
+        })
+        SET e.embedding = $embedding
+        RETURN count(e) as updated_count
+        """
+        
+        params = {
+            "namespace": namespace,
+            "entity_type": entity_type,
+            "normalized_name": normalized_name,
+            "embedding": embedding
+        }
+        
+        try:
+            result = self.client.execute_write_tx(query, params)
+            updated = result[0]['updated_count'] > 0 if result else False
+            
+            if updated:
+                logger.info(f"Updated embedding for entity: {entity_type}='{name}'")
+            
+            return updated
+            
+        except Exception as e:
+            logger.error(f"Failed to update entity embedding: {e}")
+            return False
+    
     def normalize_name(self, name: str) -> str:
         """Normalize an entity name for matching.
         

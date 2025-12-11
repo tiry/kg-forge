@@ -441,16 +441,20 @@ The first step is to build an implementation plan that decompose the work into s
    - add 74 new tests across 6 modules
    - comprehensive testing for CLI, repositories, and hooks
    
- - **Step 8: Entity Normalization and Deduplication** ⏳ NOT STARTED
+ - **Step 8: Entity Normalization and Deduplication** ✅ COMPLETED
    - basic text normalization (lowercase, trim, remove special chars)
    - dictionary-based normalization (abbreviation expansion)
    - fuzzy deduplication using Jellyfish
-   - vector-based deduplication using BERT embeddings
-   - interactive deduplication UI
-   - alias storage and management
-   - Neo4j vector index integration
+   - comprehensive test coverage
    
- - **Step 9: Rendering** (Not implemented yet)
+ - **Step 9: Vector-Based Entity Deduplication** ✅ COMPLETED
+   - vector-based deduplication using BERT embeddings (all-MiniLM-L6-v2)
+   - Neo4j vector index integration
+   - semantic similarity matching with cosine similarity
+   - configurable threshold and embedding models
+   - comprehensive test coverage (12 tests)
+   
+ - **Step 10: Rendering** (Not implemented yet)
    - implement the rendering using neovis.js
    - generate HTML visualization
    

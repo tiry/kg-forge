@@ -28,6 +28,7 @@ kg_forge/
 │   │   ├── entities.py     # Entity commands (list, show, validate)
 │   │   ├── parse.py        # Parse command
 │   │   ├── ingest.py       # Ingest command
+│   │   ├── pipeline.py     # Pipeline command
 │   │   ├── query.py        # Query command
 │   │   ├── render.py       # Render command
 │   │   └── neo4j_ops.py    # Neo4j operations (start/stop)
@@ -36,7 +37,9 @@ kg_forge/
 │   │   └── settings.py     # Settings management (GraphConfig)
 │   ├── models/             # Data models
 │   │   ├── __init__.py
-│   │   └── document.py     # Document model
+│   │   ├── document.py     # Document model
+│   │   ├── extraction.py   # Extraction models
+│   │   └── pipeline.py     # Pipeline models
 │   ├── parsers/            # Content parsers
 │   │   ├── __init__.py
 │   │   ├── html_parser.py  # HTML parsing
@@ -50,11 +53,27 @@ kg_forge/
 │   ├── extractors/         # LLM-based entity extraction
 │   │   ├── __init__.py
 │   │   ├── base.py         # Abstract base class
+│   │   ├── llm_base.py     # LLM extractor base
 │   │   ├── factory.py      # Auto-select provider
 │   │   ├── openrouter.py   # OpenRouter implementation
 │   │   ├── bedrock.py      # AWS Bedrock implementation
 │   │   ├── parser.py       # Response parser
 │   │   └── prompt_builder.py # Prompt builder
+│   ├── pipeline/           # Pipeline orchestration
+│   │   ├── __init__.py
+│   │   ├── orchestrator.py # Pipeline orchestrator
+│   │   ├── hooks.py        # Hook system
+│   │   ├── default_hooks.py # Default hook implementations
+│   │   └── hooks/          # Modular hooks
+│   │       ├── __init__.py
+│   │       ├── normalization/  # Normalization hooks
+│   │       │   ├── __init__.py
+│   │       │   ├── basic.py    # Basic text normalization
+│   │       │   └── dictionary.py # Dictionary-based normalization
+│   │       └── deduplication/  # Deduplication hooks
+│   │           ├── __init__.py
+│   │           ├── fuzzy.py    # Fuzzy string matching
+│   │           └── vector.py   # Vector-based semantic matching
 │   ├── graph/              # Graph database abstraction
 │   │   ├── __init__.py
 │   │   ├── base.py         # Abstract base classes
@@ -63,8 +82,8 @@ kg_forge/
 │   │   └── neo4j/          # Neo4j implementation
 │   │       ├── __init__.py
 │   │       ├── client.py   # Connection manager
-│   │       ├── schema.py   # Schema management
-│   │       ├── entity_repo.py   # Entity repository
+│   │       ├── schema.py   # Schema management (incl. vector index)
+│   │       ├── entity_repo.py   # Entity repository (incl. vector search)
 │   │       └── document_repo.py # Document repository
 │   └── utils/              # Utilities
 │       ├── __init__.py
@@ -349,9 +368,9 @@ The integration tests cover:
 
 #### Test Coverage
 
-- **Unit Tests**: 40+ tests (parsers, entities, CLI, repositories)
-- **Integration Tests**: 19 tests (real Neo4j database operations)
-- **Total**: 60+ comprehensive tests
+- **Unit Tests**: 316 tests (CLI, parsers, entities, extractors, pipeline, hooks, repositories)
+- **Integration Tests**: 21 tests (real Neo4j database operations)
+- **Total**: 337 comprehensive tests with 100% pass rate
 
 ### Project Status
 
@@ -389,7 +408,19 @@ This project is currently in early development. The following features are imple
   - [x] Response parsing with error handling
   - [x] CLI extract command for testing
   - [x] Retry logic and error tracking
-- [ ] Full ingestion pipeline with LLM extraction
+- [x] Full ingestion pipeline
+  - [x] Pipeline orchestration with hooks
+  - [x] Document loading and processing
+  - [x] Entity extraction and storage
+  - [x] Dry-run mode support
+  - [x] Progress tracking and statistics
+- [x] Entity normalization and deduplication
+  - [x] Basic text normalization (lowercase, trim, special chars)
+  - [x] Dictionary-based normalization (abbreviation expansion)
+  - [x] Fuzzy string matching deduplication (Jellyfish)
+  - [x] Vector-based semantic deduplication (BERT embeddings)
+  - [x] Neo4j vector index integration
+  - [x] Configurable similarity thresholds
 - [ ] Graph visualization
 
 #### Architecture
@@ -397,7 +428,13 @@ This project is currently in early development. The following features are imple
 **Graph Abstraction Layer:**
 - `kg_forge/graph/base.py` - Abstract interfaces (GraphClient, SchemaManager, EntityRepository, DocumentRepository)
 - `kg_forge/graph/factory.py` - Factory for backend-agnostic access
-- `kg_forge/graph/neo4j/` - Complete Neo4j implementation
+- `kg_forge/graph/neo4j/` - Complete Neo4j implementation with vector search
+
+**Pipeline & Hooks:**
+- `kg_forge/pipeline/orchestrator.py` - Orchestrates the full ingestion pipeline
+- `kg_forge/pipeline/hooks.py` - Extensible hook system for custom processing
+- `kg_forge/pipeline/hooks/normalization/` - Text normalization strategies
+- `kg_forge/pipeline/hooks/deduplication/` - Entity deduplication strategies (fuzzy + vector)
 
 **Key Design Decisions:**
 - Single `Entity` label with `entity_type` property (flexible schema)
@@ -405,5 +442,6 @@ This project is currently in early development. The following features are imple
 - Namespace property on all nodes for multi-tenancy
 - Content hash tracking for deduplication
 - Normalized entity names for fuzzy matching
+- Vector embeddings (384-dimensional BERT) for semantic similarity
 
 ## License

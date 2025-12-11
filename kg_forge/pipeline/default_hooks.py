@@ -27,7 +27,10 @@ from kg_forge.pipeline.hooks.normalization import (
     basic_normalize_entities,
     dictionary_normalize_entities,
 )
-from kg_forge.pipeline.hooks.deduplication import fuzzy_deduplicate_entities
+from kg_forge.pipeline.hooks.deduplication import (
+    fuzzy_deduplicate_entities,
+    vector_deduplicate_entities,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -36,6 +36,7 @@ class Neo4jSchemaManager(SchemaManager):
             logger.info("Creating database schema...")
             self.create_constraints()
             self.create_indexes()
+            self.create_vector_index()
             logger.info("Database schema created successfully")
         except Exception as e:
             raise SchemaError(f"Failed to create schema: {e}")
@@ -100,6 +101,32 @@ class Neo4jSchemaManager(SchemaManager):
             logger.info(f"Created {len(indexes)} indexes")
         except Exception as e:
             raise SchemaError(f"Failed to create indexes: {e}")
+    
+    def create_vector_index(self) -> None:
+        """
+        Create vector index for entity embeddings.
+        
+        This creates a vector index using cosine similarity for
+        384-dimensional BERT embeddings (all-MiniLM-L6-v2).
+        """
+        logger.info("Creating vector index...")
+        
+        query = """
+        CREATE VECTOR INDEX entity_embeddings IF NOT EXISTS
+        FOR (e:Entity)
+        ON e.embedding
+        OPTIONS {indexConfig: {
+            `vector.dimensions`: 384,
+            `vector.similarity_function`: 'cosine'
+        }}
+        """
+        
+        try:
+            self.client.execute_write(query)
+            logger.info("Created vector index: entity_embeddings (384 dimensions, cosine similarity)")
+        except Exception as e:
+            # Vector indexes might not be available in all Neo4j editions
+            logger.warning(f"Vector index creation skipped or failed: {e}")
     
     def verify_schema(self) -> bool:
         """Verify schema is correctly set up.
