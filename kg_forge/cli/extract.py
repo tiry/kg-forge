@@ -12,12 +12,14 @@ from kg_forge.models.extraction import ExtractionRequest
 from kg_forge.extractors.factory import create_extractor
 from kg_forge.extractors.base import ConfigurationError
 from kg_forge.parsers.html_parser import ConfluenceHTMLParser
+from kg_forge.utils.verbose import create_verbose_logger
 
 console = Console()
 
 
 @click.command()
 @click.argument("file_path", type=click.Path(exists=True))
+@click.pass_context
 @click.option(
     "--types",
     "-t",
@@ -50,6 +52,7 @@ console = Console()
     help="Directory containing entity definitions"
 )
 def extract(
+    ctx: click.Context,
     file_path: str,
     types: tuple,
     min_confidence: float,
@@ -75,17 +78,31 @@ def extract(
       
       # Output as JSON
       kg-forge extract test-doc.html --format json
+      
+      # With verbose output
+      kg-forge --verbose extract test-doc.html
     """
     try:
+        # Get settings from context
+        settings = ctx.obj.get("settings")
+        
+        # Create verbose logger if verbose mode is enabled
+        verbose_logger = None
+        if settings and settings.app.verbose:
+            verbose_logger = create_verbose_logger(enabled=True)
+        
         # Load document
         console.print(f"[cyan]Loading document:[/cyan] {file_path}")
-        parser = ConfluenceHTMLParser()
+        parser =  ConfluenceHTMLParser()
         document = parser.parse_file(Path(file_path))
         
         # Create extractor
         console.print("[cyan]Initializing extractor...[/cyan]")
         try:
-            extractor = create_extractor(entities_dir=entities_dir)
+            extractor = create_extractor(
+                entities_dir=entities_dir,
+                verbose_logger=verbose_logger
+            )
         except ConfigurationError as e:
             console.print(f"[red]Configuration Error:[/red] {e}")
             raise click.Abort()

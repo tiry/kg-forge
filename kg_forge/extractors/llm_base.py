@@ -13,6 +13,7 @@ from kg_forge.models.extraction import ExtractionRequest, ExtractionResult
 from kg_forge.extractors.base import EntityExtractor, APIError, ParseError
 from kg_forge.extractors.parser import ResponseParser
 from kg_forge.extractors.prompt_builder import PromptBuilder
+from kg_forge.utils.verbose import VerboseLogger
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,8 @@ class LLMEntityExtractor(EntityExtractor):
         model_name: str,
         entities_dir: str = "entities_extract",
         max_retries: int = 3,
-        max_consecutive_failures: int = 10
+        max_consecutive_failures: int = 10,
+        verbose_logger: Optional[VerboseLogger] = None
     ):
         """Initialize LLM extractor.
         
@@ -46,10 +48,12 @@ class LLMEntityExtractor(EntityExtractor):
             entities_dir: Directory containing entity definition files
             max_retries: Maximum retry attempts for failed calls (default: 3)
             max_consecutive_failures: Abort if this many consecutive failures
+            verbose_logger: Optional verbose logger for detailed output
         """
         self.model_name = model_name
         self.max_retries = max_retries
         self.max_consecutive_failures = max_consecutive_failures
+        self.verbose_logger = verbose_logger
         
         # Initialize prompt builder and parser
         self.prompt_builder = PromptBuilder(entities_dir=entities_dir)
@@ -97,22 +101,52 @@ class LLMEntityExtractor(EntityExtractor):
                 error=f"Prompt building failed: {e}"
             )
         
+        # Verbose logging: Log the prompt before LLM call
+        if self.verbose_logger:
+            entity_type_str = ", ".join(request.entity_types) if request.entity_types else "All"
+            self.verbose_logger.llm_request(
+                entity_type=entity_type_str,
+                model=self.model_name,
+                prompt=prompt
+            )
+        
         # Call LLM with retry logic (includes parsing)
         response_text = None
         tokens_used = None
         entities = None
         retry_count = 0
         last_error = None
+        llm_call_time = 0.0
         
         while retry_count <= self.max_retries:
             try:
                 # Delegate to subclass for actual API call
+                llm_start = time.time()
                 response = self._call_llm_api(prompt, request.max_tokens)
+                llm_call_time = time.time() - llm_start
+                
                 response_text = response["text"]
                 tokens_used = response.get("tokens")
                 
                 # Parse response (may raise ParseError)
                 entities = self.parser.parse(response_text)
+                
+                # Verbose logging: Log the successful response
+                if self.verbose_logger:
+                    # Prepare token info dict if available
+                    token_info = None
+                    if tokens_used:
+                        if isinstance(tokens_used, dict):
+                            token_info = tokens_used
+                        else:
+                            token_info = {'total': tokens_used}
+                    
+                    self.verbose_logger.llm_response(
+                        response=response_text,
+                        elapsed_time=llm_call_time,
+                        tokens=token_info,
+                        status="success"
+                    )
                 
                 # Success! Reset consecutive failures and break
                 self._consecutive_failures = 0

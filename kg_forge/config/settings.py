@@ -62,6 +62,7 @@ class AppConfig(BaseModel):
     """Application configuration."""
     log_level: str = Field(default="INFO")
     default_namespace: str = Field(default="default")
+    verbose: bool = Field(default=False)
 
     @field_validator('log_level')
     @classmethod
@@ -181,6 +182,10 @@ class Settings(BaseModel):
             app_config["log_level"] = os.getenv("LOG_LEVEL")
         if os.getenv("DEFAULT_NAMESPACE"):
             app_config["default_namespace"] = os.getenv("DEFAULT_NAMESPACE")
+        if os.getenv("KG_FORGE_VERBOSE"):
+            # Support 1, true, True, yes, Yes for enabling verbose
+            verbose_val = os.getenv("KG_FORGE_VERBOSE", "").lower()
+            app_config["verbose"] = verbose_val in ("1", "true", "yes")
         if app_config:
             config["app"] = app_config
 

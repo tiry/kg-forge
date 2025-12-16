@@ -6,13 +6,14 @@ Uses boto3 to access Claude models hosted on AWS Bedrock.
 
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
 
 from kg_forge.extractors.llm_base import LLMEntityExtractor
 from kg_forge.extractors.base import APIError
+from kg_forge.utils.verbose import VerboseLogger
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ class BedrockExtractor(LLMEntityExtractor):
         timeout: int = 30,
         max_retries: int = 1,
         max_consecutive_failures: int = 10,
-        entities_dir: str = "entities_extract"
+        entities_dir: str = "entities_extract",
+        verbose_logger: Optional[VerboseLogger] = None
     ):
         """Initialize Bedrock extractor.
         
@@ -47,13 +49,15 @@ class BedrockExtractor(LLMEntityExtractor):
             max_retries: Maximum retry attempts for failed calls
             max_consecutive_failures: Abort if this many consecutive failures
             entities_dir: Directory containing entity definition files
+            verbose_logger: Optional verbose logger for detailed output
         """
         # Initialize base class
         super().__init__(
             model_name=model_name,
             entities_dir=entities_dir,
             max_retries=max_retries,
-            max_consecutive_failures=max_consecutive_failures
+            max_consecutive_failures=max_consecutive_failures,
+            verbose_logger=verbose_logger
         )
         
         # Bedrock-specific configuration

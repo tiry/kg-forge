@@ -29,8 +29,14 @@ logger = get_logger(__name__)
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False),
     help="Set the logging level"
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Enable verbose output (show LLM prompts and responses)"
+)
 @click.pass_context
-def cli(ctx: click.Context, log_level: Optional[str] = None) -> None:
+def cli(ctx: click.Context, log_level: Optional[str] = None, verbose: bool = False) -> None:
     """
     Knowledge Graph Forge - CLI tool for building and managing knowledge graphs.
     
@@ -42,8 +48,15 @@ def cli(ctx: click.Context, log_level: Optional[str] = None) -> None:
     
     # Load configuration with any overrides
     config_overrides = {}
+    app_overrides = {}
+    
     if log_level:
-        config_overrides = {"app": {"log_level": log_level}}
+        app_overrides["log_level"] = log_level
+    if verbose:
+        app_overrides["verbose"] = verbose
+    
+    if app_overrides:
+        config_overrides = {"app": app_overrides}
     
     try:
         settings = get_settings(config_overrides)

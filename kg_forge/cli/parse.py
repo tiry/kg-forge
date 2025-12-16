@@ -6,11 +6,13 @@ from rich.console import Console
 from rich.table import Table
 
 from kg_forge.parsers import ConfluenceHTMLParser, DocumentLoader
+from kg_forge.utils.verbose import create_verbose_logger
 
 console = Console()
 
 
 @click.command(name="parse")
+@click.pass_context
 @click.option(
     "--source",
     type=click.Path(exists=True, path_type=Path),
@@ -27,13 +29,23 @@ console = Console()
     is_flag=True,
     help="Display extracted links",
 )
-def parse_html(source: Path, show_content: bool, show_links: bool):
+def parse_html(ctx: click.Context, source: Path, show_content: bool, show_links: bool):
     """
     Parse HTML files and display extracted information.
     
     This command demonstrates the HTML parser by showing what gets extracted
     from Confluence HTML exports: title, breadcrumb, links, and markdown content.
+    
+    Use --verbose flag to see detailed parsing information.
     """
+    # Get settings from context
+    settings = ctx.obj.get("settings")
+    
+   # Create verbose logger if verbose mode is enabled
+    verbose_logger = None
+    if settings and settings.app.verbose:
+        verbose_logger = create_verbose_logger(enabled=True)
+    
     console.print(f"\n[bold blue]Parsing HTML from:[/bold blue] {source}\n")
     
     # Initialize parser and loader
@@ -44,12 +56,35 @@ def parse_html(source: Path, show_content: bool, show_links: bool):
     try:
         if source.is_file():
             console.print("[yellow]Parsing single file...[/yellow]\n")
+            if verbose_logger:
+                verbose_logger.info(f"Starting parse of file: {source}")
             documents = [parser.parse_file(source)]
+            if verbose_logger:
+                doc = documents[0]
+                verbose_logger.info(
+                    f"Parsed document:\n"
+                    f"  Title: {doc.title}\n"
+                    f"  ID: {doc.doc_id}\n"
+                    f"  Content size: {len(doc.text)} chars\n"
+                    f"  Links found: {len(doc.links)}\n"
+                    f"  Hash: {doc.content_hash}"
+                )
         else:
             console.print("[yellow]Parsing directory...[/yellow]\n")
+            if verbose_logger:
+                verbose_logger.info(f"Starting directory parse: {source}")
             documents = loader.load_from_directory(source)
+            if verbose_logger:
+                verbose_logger.info(
+                    f"Directory parsing complete:\n"
+                    f"  Files processed: {len(documents)}\n"
+                    f"  Total content: {sum(len(d.text) for d in documents)} chars\n"
+                    f"  Total links: {sum(len(d.links) for d in documents)}"
+                )
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
+        if verbose_logger:
+            verbose_logger.error(f"Parsing failed: {e}")
         return
     
     console.print(f"[green]✓ Successfully parsed {len(documents)} document(s)[/green]\n")

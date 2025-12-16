@@ -7,6 +7,7 @@ import os
 from typing import Optional
 
 from kg_forge.extractors.base import EntityExtractor, ConfigurationError
+from kg_forge.utils.verbose import VerboseLogger
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,8 @@ def create_extractor(
     openrouter_api_key: Optional[str] = None,
     openrouter_model: Optional[str] = None,
     bedrock_model: Optional[str] = None,
-    bedrock_region: Optional[str] = None
+    bedrock_region: Optional[str] = None,
+    verbose_logger: Optional[VerboseLogger] = None
 ) -> EntityExtractor:
     """Create appropriate extractor based on available configuration.
     
@@ -54,7 +56,8 @@ def create_extractor(
         return OpenRouterExtractor(
             api_key=api_key,
             model_name=model,
-            entities_dir=entities_dir
+            entities_dir=entities_dir,
+            verbose_logger=verbose_logger
         )
     
     # Try Bedrock as fallback
@@ -73,7 +76,8 @@ def create_extractor(
         return BedrockExtractor(
             model_name=model,
             region=region,
-            entities_dir=entities_dir
+            entities_dir=entities_dir,
+            verbose_logger=verbose_logger
         )
     
     # No valid configuration found
