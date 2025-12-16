@@ -43,6 +43,21 @@ class PipelineConfig(BaseModel):
         return v
 
 
+class VectorConfig(BaseModel):
+    """Vector deduplication configuration."""
+    persist_dir: str = Field(default="./data/chroma_db")
+    threshold: float = Field(default=0.85)
+    model_name: str = Field(default="all-MiniLM-L6-v2")
+    
+    @field_validator('threshold')
+    @classmethod
+    def validate_threshold(cls, v):
+        """Validate vector similarity threshold is between 0 and 1."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("Vector threshold must be between 0.0 and 1.0")
+        return v
+
+
 class AppConfig(BaseModel):
     """Application configuration."""
     log_level: str = Field(default="INFO")
@@ -72,6 +87,7 @@ class Settings(BaseModel):
     aws: AWSConfig = Field(default_factory=AWSConfig)
     graph: GraphConfig = Field(default_factory=GraphConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    vector: VectorConfig = Field(default_factory=VectorConfig)
     app: AppConfig = Field(default_factory=AppConfig)
 
     @classmethod

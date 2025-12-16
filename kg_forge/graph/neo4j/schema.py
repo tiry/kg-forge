@@ -36,7 +36,6 @@ class Neo4jSchemaManager(SchemaManager):
             logger.info("Creating database schema...")
             self.create_constraints()
             self.create_indexes()
-            self.create_vector_index()
             logger.info("Database schema created successfully")
         except Exception as e:
             raise SchemaError(f"Failed to create schema: {e}")
@@ -125,8 +124,12 @@ class Neo4jSchemaManager(SchemaManager):
             self.client.execute_write(query)
             logger.info("Created vector index: entity_embeddings (384 dimensions, cosine similarity)")
         except Exception as e:
-            # Vector indexes might not be available in all Neo4j editions
-            logger.warning(f"Vector index creation skipped or failed: {e}")
+            # Vector indexes are only available in Neo4j Enterprise Edition or AuraDB
+            logger.warning(
+                f"Vector index creation skipped - requires Neo4j Enterprise Edition or AuraDB "
+                f"(currently using Community Edition). Vector-based deduplication will be disabled. "
+                f"Fuzzy and dictionary-based deduplication will still work. Error: {e}"
+            )
     
     def verify_schema(self) -> bool:
         """Verify schema is correctly set up.

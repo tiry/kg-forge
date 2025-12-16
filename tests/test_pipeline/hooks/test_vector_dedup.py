@@ -1,7 +1,9 @@
-"""Tests for vector-based entity deduplication."""
+"""Tests for vector-based entity deduplication with ChromaDB."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+import tempfile
+import shutil
+from unittest.mock import Mock
 import numpy as np
 
 from kg_forge.pipeline.hooks.deduplication.vector import (
@@ -9,6 +11,7 @@ from kg_forge.pipeline.hooks.deduplication.vector import (
     vector_deduplicate_entities
 )
 from kg_forge.models.extraction import ExtractedEntity, ExtractionResult
+from kg_forge.vector.chroma import ChromaVectorStore
 
 
 class TestVectorDeduplicator:
@@ -24,11 +27,11 @@ class TestVectorDeduplicator:
         assert len(embedding) == 384
         assert all(isinstance(x, float) for x in embedding)
     
-    def test_embedding_dimension_property(self):
-        """Test that embedding_dim property is correctly set."""
+    def test_dimension_property(self):
+        """Test that dimension property is correctly set."""
         dedup = VectorDeduplicator()
         
-        assert dedup.embedding_dim == 384
+        assert dedup.dimension == 384
     
     def test_similar_texts_have_high_similarity(self):
         """Test that similar texts produce similar embeddings."""
@@ -45,45 +48,55 @@ class TestVectorDeduplicator:
         # ML terms should be more similar than ML vs database
         assert sim_ml > sim_db
         assert sim_ml > 0.5  # Reasonably high similarity
+
+
+class TestVectorDeduplicatorWithChroma:
+    """Test VectorDeduplicator with ChromaDB integration."""
     
-    def test_find_similar_with_matches(self):
+    @pytest.fixture
+    def temp_chroma_dir(self):
+        """Create temporary directory for ChromaDB."""
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    @pytest.fixture
+    def vector_store(self, temp_chroma_dir):
+        """Create ChromaVectorStore instance."""
+        return ChromaVectorStore(persist_directory=temp_chroma_dir)
+    
+    def test_find_similar_with_matches(self, vector_store):
         """Test finding similar entities when matches exist."""
-        dedup = VectorDeduplicator()
+        dedup = VectorDeduplicator(vector_store=vector_store)
         
+        # Add an existing entity to ChromaDB
+        existing_embedding = dedup.get_embedding("kubernetes")
+        vector_store.add_entity(
+            entity_id="default:Technology:kubernetes",
+            entity_type="Technology",
+            entity_name="Kubernetes",
+            embedding=existing_embedding,
+            namespace="default"
+        )
+        
+        # Entity to search for
         entity = ExtractedEntity(
             entity_type="Technology",
             name="k8s",
             properties={"normalized_name": "kubernetes"}
         )
         
-        # Mock entity repo
-        mock_repo = Mock()
-        existing_entity = {
-            "name": "Kubernetes",
-            "entity_type": "Technology",
-            "similarity_score": 0.92
-        }
-        mock_repo.vector_search.return_value = [existing_entity]
-        
         # Find similar
-        similar = dedup.find_similar(entity, mock_repo, "default", 0.85)
+        similar = dedup.find_similar(entity, "default", 0.85)
         
+        # Should find the match
         assert similar is not None
         assert similar["name"] == "Kubernetes"
-        assert similar["similarity_score"] == 0.92
-        
-        # Verify vector_search was called with correct params
-        mock_repo.vector_search.assert_called_once()
-        call_kwargs = mock_repo.vector_search.call_args[1]
-        assert call_kwargs["entity_type"] == "Technology"
-        assert call_kwargs["namespace"] == "default"
-        assert call_kwargs["threshold"] == 0.85
-        assert call_kwargs["limit"] == 5
-        assert len(call_kwargs["embedding"]) == 384
+        assert similar["score"] > 0.85
     
-    def test_find_similar_no_matches(self):
+    def test_find_similar_no_matches(self, vector_store):
         """Test finding similar entities when no matches exist."""
-        dedup = VectorDeduplicator()
+        dedup = VectorDeduplicator(vector_store=vector_store)
         
         entity = ExtractedEntity(
             entity_type="Technology",
@@ -91,18 +104,21 @@ class TestVectorDeduplicator:
             properties={"normalized_name": "unique technology"}
         )
         
-        # Mock entity repo with no results
-        mock_repo = Mock()
-        mock_repo.vector_search.return_value = []
-        
-        # Find similar
-        similar = dedup.find_similar(entity, mock_repo, "default", 0.85)
+        # Find similar (empty ChromaDB)
+        similar = dedup.find_similar(entity, "default", 0.85)
         
         assert similar is None
 
 
 class TestVectorDeduplicateEntitiesHook:
     """Test vector_deduplicate_entities hook."""
+    
+    @pytest.fixture
+    def temp_chroma_dir(self):
+        """Create temporary directory for ChromaDB."""
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        shutil.rmtree(temp_dir, ignore_errors=True)
     
     def test_empty_extraction_result(self):
         """Test with empty extraction result."""
@@ -115,29 +131,29 @@ class TestVectorDeduplicateEntitiesHook:
         
         assert result.entities == []
     
-    def test_vector_dedup_marks_duplicates(self):
+    def test_vector_dedup_marks_duplicates(self, temp_chroma_dir):
         """Test that vector dedup marks similar entities."""
         # Mock context
         context = Mock()
         context.logger = Mock()
         context.settings = Mock()
-        context.settings.pipeline = Mock()
-        context.settings.pipeline.vector_threshold = 0.85
-        context.settings.pipeline.embedding_model = 'all-MiniLM-L6-v2'
+        context.settings.vector = Mock()
+        context.settings.vector.threshold = 0.85
+        context.settings.vector.model_name = 'all-MiniLM-L6-v2'
+        context.settings.vector.persist_dir = temp_chroma_dir
         context.namespace = "default"
         
-        # Mock entity repo
-        mock_repo = Mock()
-        existing = {
-            "name": "Kubernetes",
-            "entity_type": "Technology",
-            "similarity_score": 0.92,
-            "id": "existing-1"
-        }
-        mock_repo.vector_search.return_value = [existing]
-        
-        context.graph_client = Mock()
-        context.graph_client.entity_repo = mock_repo
+        # Pre-populate ChromaDB with existing entity
+        vector_store = ChromaVectorStore(persist_directory=temp_chroma_dir)
+        dedup = VectorDeduplicator(vector_store=vector_store)
+        existing_embedding = dedup.get_embedding("kubernetes")
+        vector_store.add_entity(
+            entity_id="default:Technology:kubernetes",
+            entity_type="Technology",
+            entity_name="Kubernetes",
+            embedding=existing_embedding,
+            namespace="default"
+        )
         
         # Entity to deduplicate
         entities = [
@@ -153,35 +169,28 @@ class TestVectorDeduplicateEntitiesHook:
         # Run hook
         result = vector_deduplicate_entities(context, extraction_result)
         
-        # Verify
+        # Verify duplicate was marked
         assert hasattr(result.entities[0], 'duplicate_of')
         assert result.entities[0].duplicate_of == 'Kubernetes'
-        assert result.entities[0].duplicate_of_id == 'existing-1'
     
-    def test_vector_dedup_creates_embeddings_for_new_entities(self):
-        """Test that new entities get embeddings created."""
+    def test_vector_dedup_stores_new_entities(self, temp_chroma_dir):
+        """Test that new unique entities are stored in ChromaDB."""
         # Mock context
         context = Mock()
         context.logger = Mock()
         context.settings = Mock()
-        context.settings.pipeline = Mock()
-        context.settings.pipeline.vector_threshold = 0.85
-        context.settings.pipeline.embedding_model = 'all-MiniLM-L6-v2'
+        context.settings.vector = Mock()
+        context.settings.vector.threshold = 0.85
+        context.settings.vector.model_name = 'all-MiniLM-L6-v2'
+        context.settings.vector.persist_dir = temp_chroma_dir
         context.namespace = "default"
-        
-        # Mock entity repo with no matches
-        mock_repo = Mock()
-        mock_repo.vector_search.return_value = []
-        
-        context.graph_client = Mock()
-        context.graph_client.entity_repo = mock_repo
         
         # New unique entity
         entities = [
             ExtractedEntity(
                 entity_type="Technology",
-                name="New Tech",
-                properties={'normalized_name': 'new tech'}
+                name="Brand New Tech",
+                properties={'normalized_name': 'brand new tech'}
             )
         ]
         
@@ -190,26 +199,25 @@ class TestVectorDeduplicateEntitiesHook:
         # Run hook
         result = vector_deduplicate_entities(context, extraction_result)
         
-        # Verify embedding was created
-        assert hasattr(result.entities[0], 'embedding')
-        assert len(result.entities[0].embedding) == 384
-        assert all(isinstance(x, float) for x in result.entities[0].embedding)
+        # Verify it was NOT marked as duplicate
+        assert not hasattr(result.entities[0], 'duplicate_of') or result.entities[0].duplicate_of is None
+        
+        # Verify it was stored in ChromaDB
+        vector_store = ChromaVectorStore(persist_directory=temp_chroma_dir)
+        stats = vector_store.get_stats("default")
+        assert stats['entity_count'] == 1
     
-    def test_vector_dedup_skips_already_merged_entities(self):
+    def test_vector_dedup_skips_already_merged_entities(self, temp_chroma_dir):
         """Test that entities already marked as duplicates are skipped."""
         # Mock context
         context = Mock()
         context.logger = Mock()
         context.settings = Mock()
-        context.settings.pipeline = Mock()
-        context.settings.pipeline.vector_threshold = 0.85
-        context.settings.pipeline.embedding_model = 'all-MiniLM-L6-v2'
+        context.settings.vector = Mock()
+        context.settings.vector.threshold = 0.85
+        context.settings.vector.model_name = 'all-MiniLM-L6-v2'
+        context.settings.vector.persist_dir = temp_chroma_dir
         context.namespace = "default"
-        
-        # Mock entity repo
-        mock_repo = Mock()
-        context.graph_client = Mock()
-        context.graph_client.entity_repo = mock_repo
         
         # Entity already marked as duplicate by fuzzy matching
         entities = [
@@ -226,8 +234,11 @@ class TestVectorDeduplicateEntitiesHook:
         # Run hook
         result = vector_deduplicate_entities(context, extraction_result)
         
-        # Verify vector_search was NOT called
-        mock_repo.vector_search.assert_not_called()
+        # Verify ChromaDB was not used (no entities added)
+        vector_store = ChromaVectorStore(persist_directory=temp_chroma_dir)
+        collections = vector_store.get_stats()
+        # Should have no collections (or empty collection)
+        assert collections['total_collections'] == 0 or len(collections['collections']) == 0
     
     def test_vector_dedup_handles_model_load_failure(self):
         """Test graceful handling of model loading failures."""
@@ -235,9 +246,10 @@ class TestVectorDeduplicateEntitiesHook:
         context = Mock()
         context.logger = Mock()
         context.settings = Mock()
-        context.settings.pipeline = Mock()
-        context.settings.pipeline.vector_threshold = 0.85
-        context.settings.pipeline.embedding_model = 'invalid-model-name-that-does-not-exist'
+        context.settings.vector = Mock()
+        context.settings.vector.threshold = 0.85
+        context.settings.vector.model_name = 'invalid-model-name-that-does-not-exist'
+        context.settings.vector.persist_dir = './data/chroma_db'
         context.namespace = "default"
         
         entities = [
@@ -256,19 +268,13 @@ class TestVectorDeduplicateEntitiesHook:
         assert result.entities == entities
         assert context.logger.error.called
     
-    def test_vector_dedup_uses_default_config(self):
+    def test_vector_dedup_uses_default_config(self, temp_chroma_dir):
         """Test that default config values are used when settings not provided."""
-        # Mock context without pipeline settings
+        # Mock context without vector settings
         context = Mock()
         context.logger = Mock()
-        context.settings = Mock(spec=[])  # No pipeline attribute
+        context.settings = Mock(spec=[])  # No vector attribute
         context.namespace = "default"
-        
-        # Mock entity repo
-        mock_repo = Mock()
-        mock_repo.vector_search.return_value = []
-        context.graph_client = Mock()
-        context.graph_client.entity_repo = mock_repo
         
         entities = [
             ExtractedEntity(
@@ -285,38 +291,3 @@ class TestVectorDeduplicateEntitiesHook:
         
         # Verify it worked with defaults
         assert len(result.entities) == 1
-    
-    def test_vector_dedup_handles_search_errors(self):
-        """Test that search errors are handled gracefully."""
-        # Mock context
-        context = Mock()
-        context.logger = Mock()
-        context.settings = Mock()
-        context.settings.pipeline = Mock()
-        context.settings.pipeline.vector_threshold = 0.85
-        context.settings.pipeline.embedding_model = 'all-MiniLM-L6-v2'
-        context.namespace = "default"
-        
-        # Mock entity repo that raises exception
-        mock_repo = Mock()
-        mock_repo.vector_search.side_effect = Exception("Neo4j connection error")
-        
-        context.graph_client = Mock()
-        context.graph_client.entity_repo = mock_repo
-        
-        entities = [
-            ExtractedEntity(
-                entity_type="Technology",
-                name="Test",
-                properties={'normalized_name': 'test'}
-            )
-        ]
-        
-        extraction_result = ExtractionResult(entities=entities)
-        
-        # Should handle error and continue
-        result = vector_deduplicate_entities(context, extraction_result)
-        
-        # Entity should still be there (error was caught)
-        assert len(result.entities) == 1
-        assert context.logger.warning.called

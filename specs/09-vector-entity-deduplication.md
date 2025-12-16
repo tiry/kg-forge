@@ -1,19 +1,21 @@
-# Step 9: Vector-Based Entity Deduplication
+# Step 9: Vector-Based Entity Deduplication (ChromaDB)
 
-**Status**: Completed  
+**Status**: In Progress - Updating to use ChromaDB  
 **Dependencies**: Step 8 (Basic Normalization and Fuzzy Matching)
 
 ## Overview
 
-Implement vector-based entity deduplication using BERT embeddings and Neo4j vector indexes. This adds semantic similarity matching to complement the existing fuzzy string matching, enabling detection of entities that are semantically similar but may not match well with string comparison alone.
+Implement vector-based entity deduplication using BERT embeddings and ChromaDB for vector storage. This adds semantic similarity matching to complement the existing fuzzy string matching, enabling detection of entities that are semantically similar but may not match well with string comparison alone.
+
+**Architecture Change**: Instead of using Neo4j Enterprise vector indexes (not available in Community Edition), we use ChromaDB as a separate, embedded vector database alongside Neo4j.
 
 ## Goals
 
 1. **Semantic Similarity**: Detect entities with similar meanings using embeddings
 2. **BERT Integration**: Use Hugging Face sentence-transformers for local embeddings
-3. **Neo4j Vector Index**: Leverage Neo4j's built-in vector search capabilities
+3. **ChromaDB Storage**: Lightweight, embeddable vector database (SQLite-backed)
 4. **Complementary Matching**: Run after fuzzy matching to catch additional duplicates
-5. **Efficient Search**: Use vector indexes for fast similarity queries
+5. **Efficient Search**: Use ChromaDB's built-in cosine similarity search
 
 ## Architecture
 
@@ -21,107 +23,380 @@ Implement vector-based entity deduplication using BERT embeddings and Neo4j vect
 
 ```
 kg_forge/
+├── vector/                      # NEW: Vector storage abstraction
+│   ├── __init__.py
+│   ├── base.py                  # Abstract VectorStore interface
+│   └── chroma.py                # ChromaDB implementation
 ├── pipeline/
 │   └── hooks/
 │       └── deduplication/
-│           ├── fuzzy.py          # Existing fuzzy matching
-│           └── vector.py         # New: Vector-based matching
+│           ├── fuzzy.py         # Existing fuzzy matching
+│           └── vector.py        # Vector-based matching (updated)
 ├── graph/
 │   └── neo4j/
-│       ├── entity_repo.py        # Update: Add vector search methods
-│       └── schema.py             # Update: Create vector index
+│       └── entity_repo.py       # Entity metadata (no vector methods needed)
 └── config/
-    └── settings.py               # Update: Add vector config
+    └── settings.py              # Vector config
 ```
+
+### Data Flow
+
+```
+Neo4j (Graph Database)          ChromaDB (Vector Database)
+├─ Entities                     ├─ Entity Embeddings
+├─ Documents                    │  • Collection per namespace
+├─ Relationships                │  • 384-dim vectors
+└─ Entity metadata              └─ Metadata: entity_id, type, name
+```
+
+**Key Design Decision**: Separate concerns - Neo4j handles graph structure, ChromaDB handles vector similarity.
 
 ## Implementation Details
 
-### 1. Vector Deduplication Hook
+### 1. Vector Store Abstraction
+
+**File**: `kg_forge/vector/base.py`
+
+```python
+"""Abstract base class for vector stores."""
+
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional, Tuple
+
+
+class VectorStore(ABC):
+    """Abstract interface for vector storage and similarity search."""
+    
+    @abstractmethod
+    def add_entity(
+        self,
+        entity_id: str,
+        entity_type: str,
+        entity_name: str,
+        embedding: List[float],
+        namespace: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Add entity embedding to the vector store.
+        
+        Args:
+            entity_id: Unique entity identifier
+            entity_type: Type of entity (Technology, Product, etc.)
+            entity_name: Entity name
+            embedding: Embedding vector
+            namespace: Namespace for isolation
+            metadata: Additional metadata
+        """
+        pass
+    
+    @abstractmethod
+    def search_similar(
+        self,
+        entity_type: str,
+        embedding: List[float],
+        namespace: str,
+        limit: int = 5,
+        threshold: float = 0.85
+    ) -> List[Tuple[str, float, Dict[str, Any]]]:
+        """
+        Search for similar entities by vector similarity.
+        
+        Args:
+            entity_type: Type to filter by
+            embedding: Query embedding vector
+            namespace: Namespace to search in
+            limit: Maximum results
+            threshold: Minimum similarity score (0-1)
+            
+        Returns:
+            List of (entity_id, similarity_score, metadata) tuples
+        """
+        pass
+    
+    @abstractmethod
+    def delete_namespace(self, namespace: str) -> int:
+        """
+        Delete all entities in a namespace.
+        
+        Args:
+            namespace: Namespace to clear
+            
+        Returns:
+            Number of entities deleted
+        """
+        pass
+    
+    @abstractmethod
+    def get_stats(self, namespace: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get statistics about stored vectors.
+        
+        Args:
+            namespace: Optional namespace to filter by
+            
+        Returns:
+            Statistics dictionary
+        """
+        pass
+```
+
+**File**: `kg_forge/vector/chroma.py`
+
+```python
+"""ChromaDB implementation of vector store."""
+
+import logging
+from typing import List, Dict, Any, Optional, Tuple
+import chromadb
+from chromadb.config import Settings as ChromaSettings
+
+from kg_forge.vector.base import VectorStore
+
+logger = logging.getLogger(__name__)
+
+
+class ChromaVectorStore(VectorStore):
+    """ChromaDB-based vector storage for entity embeddings."""
+    
+    def __init__(self, persist_directory: str = "./data/chroma_db"):
+        """
+        Initialize ChromaDB client.
+        
+        Args:
+            persist_directory: Directory for ChromaDB persistence
+        """
+        self.persist_directory = persist_directory
+        
+        # Initialize ChromaDB with persistence
+        self.client = chromadb.PersistentClient(
+            path=persist_directory,
+            settings=ChromaSettings(
+                anonymized_telemetry=False,
+                allow_reset=True
+            )
+        )
+        
+        logger.info(f"Initialized ChromaDB at: {persist_directory}")
+        self._collections = {}
+    
+    def _get_collection(self, namespace: str):
+        """Get or create collection for namespace."""
+        if namespace not in self._collections:
+            # Collection name: namespace-based
+            collection_name = f"entities_{namespace}"
+            
+            # Get or create collection
+            try:
+                collection = self.client.get_collection(collection_name)
+            except Exception:
+                collection = self.client.create_collection(
+                    name=collection_name,
+                    metadata={"namespace": namespace}
+                )
+            
+            self._collections[namespace] = collection
+            logger.info(f"Using ChromaDB collection: {collection_name}")
+        
+        return self._collections[namespace]
+    
+    def add_entity(
+        self,
+        entity_id: str,
+        entity_type: str,
+        entity_name: str,
+        embedding: List[float],
+        namespace: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Add entity embedding to ChromaDB."""
+        collection = self._get_collection(namespace)
+        
+        # Prepare metadata
+        meta = {
+            "entity_type": entity_type,
+            "entity_name": entity_name,
+            "namespace": namespace
+        }
+        if metadata:
+            meta.update(metadata)
+        
+        # Add to collection
+        collection.add(
+            ids=[entity_id],
+            embeddings=[embedding],
+            metadatas=[meta]
+        )
+        
+        logger.debug(f"Added embedding for entity: {entity_name} ({entity_type})")
+    
+    def search_similar(
+        self,
+        entity_type: str,
+        embedding: List[float],
+        namespace: str,
+        limit: int = 5,
+        threshold: float = 0.85
+    ) -> List[Tuple[str, float, Dict[str, Any]]]:
+        """Search for similar entities in ChromaDB."""
+        collection = self._get_collection(namespace)
+        
+        # Query with entity_type filter
+        results = collection.query(
+            query_embeddings=[embedding],
+            n_results=limit,
+            where={"entity_type": entity_type}
+        )
+        
+        # Process results
+        similar_entities = []
+        
+        if results['ids'] and results['ids'][0]:
+            for i, entity_id in enumerate(results['ids'][0]):
+                score = 1 - results['distances'][0][i]  # Convert distance to similarity
+                
+                # Filter by threshold
+                if score >= threshold:
+                    metadata = results['metadatas'][0][i]
+                    similar_entities.append((entity_id, score, metadata))
+        
+        return similar_entities
+    
+    def delete_namespace(self, namespace: str) -> int:
+        """Delete ChromaDB collection for namespace."""
+        collection_name = f"entities_{namespace}"
+        
+        try:
+            collection = self.client.get_collection(collection_name)
+            count = collection.count()
+            self.client.delete_collection(collection_name)
+            
+            # Remove from cache
+            if namespace in self._collections:
+                del self._collections[namespace]
+            
+            logger.info(f"Deleted ChromaDB collection: {collection_name} ({count} entities)")
+            return count
+            
+        except Exception as e:
+            logger.warning(f"Could not delete collection {collection_name}: {e}")
+            return 0
+    
+    def get_stats(self, namespace: Optional[str] = None) -> Dict[str, Any]:
+        """Get ChromaDB statistics."""
+        if namespace:
+            try:
+                collection = self._get_collection(namespace)
+                count = collection.count()
+                return {
+                    "namespace": namespace,
+                    "entity_count": count,
+                    "collection_name": f"entities_{namespace}"
+                }
+            except Exception as e:
+                return {"error": str(e)}
+        else:
+            # Global stats
+            collections = self.client.list_collections()
+            return {
+                "total_collections": len(collections),
+                "collections": [c.name for c in collections]
+            }
+```
+
+### 2. Updated Vector Deduplication Hook
 
 **File**: `kg_forge/pipeline/hooks/deduplication/vector.py`
 
-**Purpose**: Find semantically similar entities using BERT embeddings and cosine similarity
-
-**Key Features**:
-- Uses sentence-transformers (all-MiniLM-L6-v2 model by default)
-- Generates 384-dimensional embeddings
-- Cosine similarity threshold (default: 0.85)
-- Skips entities already matched by fuzzy dedup
-- Stores embeddings on new entities for future comparisons
-
-**Implementation**:
+Key changes:
+- Use VectorStore abstraction instead of Neo4j
+- Store embeddings in ChromaDB instead of Neo4j
+- Search uses ChromaDB similarity search
 
 ```python
-"""Vector-based entity deduplication using BERT embeddings."""
+"""Vector-based entity deduplication using BERT embeddings and ChromaDB."""
 
+import logging
 from typing import List, Optional, TYPE_CHECKING
 from sentence_transformers import SentenceTransformer
+
+from kg_forge.vector.chroma import ChromaVectorStore
 
 if TYPE_CHECKING:
     from kg_forge.pipeline.orchestrator import PipelineContext
     from kg_forge.models.extraction import Entity, ExtractionResult
 
+logger = logging.getLogger(__name__)
+
 
 class VectorDeduplicator:
-    """Deduplicate entities using vector similarity."""
+    """Deduplicate entities using vector similarity with ChromaDB."""
     
-    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
+    def __init__(
+        self,
+        model_name: str = 'all-MiniLM-L6-v2',
+        vector_store: Optional[ChromaVectorStore] = None
+    ):
         """
-        Initialize with a sentence-transformers model.
+        Initialize with a sentence-transformers model and vector store.
         
         Args:
             model_name: HuggingFace model name (default: all-MiniLM-L6-v2)
-                       Produces 384-dimensional embeddings
+            vector_store: VectorStore instance (creates new if None)
         """
         self.model = SentenceTransformer(model_name)
         self.embedding_dim = self.model.get_sentence_embedding_dimension()
+        self.vector_store = vector_store or ChromaVectorStore()
+    
+    @property
+    def dimension(self) -> int:
+        """Get embedding dimensionality."""
+        return self.embedding_dim
     
     def get_embedding(self, text: str) -> List[float]:
-        """
-        Generate embedding vector for text.
-        
-        Args:
-            text: Input text to encode
-            
-        Returns:
-            List of floats representing the embedding vector
-        """
+        """Generate embedding vector for text."""
         return self.model.encode(text, convert_to_tensor=False).tolist()
     
     def find_similar(
         self,
         entity: "Entity",
-        entity_repo,
         namespace: str,
         threshold: float = 0.85
-    ) -> Optional["Entity"]:
+    ) -> Optional[dict]:
         """
-        Find similar entity using vector search in Neo4j.
+        Find similar entity using ChromaDB vector search.
         
         Args:
             entity: Entity to find matches for
-            entity_repo: EntityRepository instance
             namespace: Entity namespace to search
             threshold: Minimum cosine similarity (0-1)
             
         Returns:
-            Most similar entity above threshold, or None
+            Dict with entity info if found, None otherwise
         """
-        # Generate embedding for current entity
+        # Generate embedding
         entity_name = entity.properties.get('normalized_name') or entity.name
         embedding = self.get_embedding(entity_name)
         
-        # Search vector index in Neo4j
-        similar_entities = entity_repo.vector_search(
+        # Search in ChromaDB
+        similar = self.vector_store.search_similar(
             entity_type=entity.entity_type,
             embedding=embedding,
             namespace=namespace,
-            limit=5,
+            limit=1,
             threshold=threshold
         )
         
         # Return best match if found
-        return similar_entities[0] if similar_entities else None
+        if similar:
+            entity_id, score, metadata = similar[0]
+            return {
+                'id': entity_id,
+                'name': metadata['entity_name'],
+                'score': score
+            }
+        
+        return None
 
 
 def vector_deduplicate_entities(
@@ -129,15 +404,16 @@ def vector_deduplicate_entities(
     extraction_result: "ExtractionResult"
 ) -> "ExtractionResult":
     """
-    Deduplicate entities using vector similarity.
+    Deduplicate entities using vector similarity and ChromaDB.
     
-    This hook uses BERT embeddings and Neo4j vector index to find
-    semantically similar entities. It runs after fuzzy matching and
-    only processes entities that weren't already matched.
+    This hook uses BERT embeddings and ChromaDB to find semantically 
+    similar entities. It runs after fuzzy matching and only processes 
+    entities that weren't already matched.
     
     Configuration:
-        settings.pipeline.vector_threshold: float (default: 0.85)
-        settings.pipeline.embedding_model: str (default: 'all-MiniLM-L6-v2')
+        settings.vector.threshold: float (default: 0.85)
+        settings.vector.model_name: str (default: 'all-MiniLM-L6-v2')
+        settings.vector.persist_dir: str (default: './data/chroma_db')
     
     Args:
         context: Pipeline context with logger and settings
@@ -152,25 +428,27 @@ def vector_deduplicate_entities(
     # Get configuration
     threshold = 0.85
     model_name = 'all-MiniLM-L6-v2'
+    persist_dir = './data/chroma_db'
     
-    if hasattr(context.settings, 'pipeline'):
-        threshold = getattr(context.settings.pipeline, 'vector_threshold', 0.85)
-        model_name = getattr(context.settings.pipeline, 'embedding_model', 'all-MiniLM-L6-v2')
+    if hasattr(context.settings, 'vector'):
+        threshold = getattr(context.settings.vector, 'threshold', 0.85)
+        model_name = getattr(context.settings.vector, 'model_name', 'all-MiniLM-L6-v2')
+        persist_dir = getattr(context.settings.vector, 'persist_dir', './data/chroma_db')
     
-    # Initialize deduplicator
+    # Initialize deduplicator with ChromaDB
     try:
-        deduplicator = VectorDeduplicator(model_name)
-        context.logger.info(f"Using embedding model: {model_name} ({deduplicator.embedding_dim} dimensions)")
+        vector_store = ChromaVectorStore(persist_directory=persist_dir)
+        deduplicator = VectorDeduplicator(model_name, vector_store)
+        context.logger.info(
+            f"Vector dedup: {model_name} ({deduplicator.dimension}D) + ChromaDB"
+        )
     except Exception as e:
-        context.logger.error(f"Failed to load embedding model: {e}")
+        context.logger.error(f"Failed to initialize vector dedup: {e}")
         return extraction_result
     
-    # Get entity repository
-    entity_repo = context.graph_client.entity_repo
     namespace = context.namespace
-    
     duplicate_count = 0
-    embedding_count = 0
+    stored_count = 0
     
     # Process each entity
     for entity in extraction_result.entities:
@@ -179,356 +457,174 @@ def vector_deduplicate_entities(
             continue
         
         try:
-            # Find similar entity using vector search
-            similar = deduplicator.find_similar(
-                entity,
-                entity_repo,
-                namespace,
-                threshold
-            )
+            # Find similar entity in ChromaDB
+            similar = deduplicator.find_similar(entity, namespace, threshold)
             
             if similar:
                 # Mark as duplicate
-                entity.duplicate_of = similar.name
-                entity.duplicate_of_id = getattr(similar, 'id', None)
+                entity.duplicate_of = similar['name']
+                entity.duplicate_of_id = similar['id']
                 duplicate_count += 1
                 
                 context.logger.info(
-                    f"Vector match: '{entity.name}' → '{similar.name}'"
+                    f"Vector match: '{entity.name}' → '{similar['name']}' "
+                    f"(score: {similar['score']:.3f})"
                 )
             else:
-                # Store embedding for new unique entities
+                # Store embedding in ChromaDB for new unique entities
                 entity_name = entity.properties.get('normalized_name') or entity.name
                 embedding = deduplicator.get_embedding(entity_name)
-                entity.embedding = embedding
-                embedding_count += 1
+                
+                # Generate entity ID (will be created in Neo4j later)
+                entity_id = f"{namespace}:{entity.entity_type}:{entity_name}"
+                
+                deduplicator.vector_store.add_entity(
+                    entity_id=entity_id,
+                    entity_type=entity.entity_type,
+                    entity_name=entity.name,
+                    embedding=embedding,
+                    namespace=namespace,
+                    metadata={'normalized_name': entity_name}
+                )
+                stored_count += 1
                 
         except Exception as e:
             context.logger.warning(
-                f"Error in vector dedup for entity '{entity.name}': {e}"
+                f"Error in vector dedup for '{entity.name}': {e}"
             )
             continue
     
-    if duplicate_count > 0:
+    if duplicate_count > 0 or stored_count > 0:
         context.logger.info(
             f"Vector dedup: {duplicate_count} duplicates found, "
-            f"{embedding_count} new embeddings created (threshold: {threshold})"
+            f"{stored_count} new embeddings stored (threshold: {threshold})"
         )
     
     return extraction_result
 ```
 
-### 2. Entity Repository Vector Search Methods
-
-**File**: `kg_forge/graph/neo4j/entity_repo.py`
-
-Add vector search capabilities:
-
-```python
-def vector_search(
-    self,
-    entity_type: str,
-    embedding: List[float],
-    namespace: str,
-    limit: int = 5,
-    threshold: float = 0.85
-) -> List[Entity]:
-    """
-    Find similar entities using Neo4j vector index.
-    
-    Args:
-        entity_type: Type of entities to search
-        embedding: Query embedding vector
-        namespace: Entity namespace
-        limit: Maximum number of results
-        threshold: Minimum cosine similarity score
-        
-    Returns:
-        List of similar entities sorted by similarity
-    """
-    query = """
-    CALL db.index.vector.queryNodes(
-        'entity_embeddings',
-        $limit,
-        $embedding
-    ) YIELD node, score
-    WHERE node.type = $entity_type
-      AND node.namespace = $namespace
-      AND score >= $threshold
-      AND node.embedding IS NOT NULL
-    RETURN node, score
-    ORDER BY score DESC
-    """
-    
-    try:
-        result = self.client.execute_query(
-            query,
-            limit=limit,
-            embedding=embedding,
-            entity_type=entity_type,
-            namespace=namespace,
-            threshold=threshold
-        )
-        
-        entities = []
-        for record in result.records:
-            node = record['node']
-            score = record['score']
-            
-            # Convert node to Entity
-            entity = self._node_to_entity(node)
-            entity.similarity_score = score
-            entities.append(entity)
-        
-        return entities
-        
-    except Exception as e:
-        self.logger.error(f"Vector search failed: {e}")
-        return []
-
-
-def store_entity_with_embedding(
-    self,
-    entity: Entity,
-    namespace: str
-) -> str:
-    """
-    Store entity in Neo4j with its embedding vector.
-    
-    Args:
-        entity: Entity to store
-        namespace: Entity namespace
-        
-    Returns:
-        Entity ID
-    """
-    # Existing storage logic...
-    entity_id = self._create_entity_node(entity, namespace)
-    
-    # Store embedding if present
-    if hasattr(entity, 'embedding') and entity.embedding:
-        self._update_entity_embedding(entity_id, entity.embedding)
-    
-    return entity_id
-
-
-def _update_entity_embedding(self, entity_id: str, embedding: List[float]) -> None:
-    """Update entity's embedding vector."""
-    query = """
-    MATCH (e:Entity {id: $entity_id})
-    SET e.embedding = $embedding
-    """
-    self.client.execute_query(
-        query,
-        entity_id=entity_id,
-        embedding=embedding
-    )
-```
-
-### 3. Neo4j Vector Index Creation
-
-**File**: `kg_forge/graph/neo4j/schema.py`
-
-Add vector index setup:
-
-```python
-def create_vector_index(self) -> None:
-    """
-    Create vector index for entity embeddings.
-    
-    This creates a vector index using cosine similarity for
-    384-dimensional BERT embeddings (all-MiniLM-L6-v2).
-    """
-    query = """
-    CREATE VECTOR INDEX entity_embeddings IF NOT EXISTS
-    FOR (e:Entity)
-    ON e.embedding
-    OPTIONS {indexConfig: {
-        `vector.dimensions`: 384,
-        `vector.similarity_function`: 'cosine'
-    }}
-    """
-    
-    try:
-        self.client.execute_query(query)
-        self.logger.info("Created vector index: entity_embeddings")
-    except Exception as e:
-        self.logger.warning(f"Vector index creation failed: {e}")
-
-
-def initialize_schema(self) -> None:
-    """Initialize all schema elements including vector index."""
-    # Existing schema creation...
-    self.create_constraints()
-    self.create_indexes()
-    
-    # Create vector index
-    self.create_vector_index()
-```
-
-### 4. Configuration Updates
+### 3. Configuration Updates
 
 **File**: `kg_forge/config/settings.py`
 
 ```python
-class PipelineSettings(BaseSettings):
-    """Pipeline-specific settings."""
+class VectorSettings(BaseSettings):
+    """Vector storage and deduplication settings."""
+    
+    # ChromaDB settings
+    persist_dir: str = "./data/chroma_db"
+    
+    # Deduplication settings  
+    threshold: float = 0.85
+    model_name: str = "all-MiniLM-L6-v2"
+    enabled: bool = True
+
+
+class GraphConfig(BaseSettings):
+    """Main configuration."""
     
     # Existing settings...
-    normalization_dict_path: Optional[str] = "config/normalization_dict.txt"
-    fuzzy_threshold: float = 0.85
+    neo4j: Neo4jSettings
+    pipeline: PipelineSettings
     
-    # Vector deduplication settings
-    vector_threshold: float = 0.85
-    embedding_model: str = "all-MiniLM-L6-v2"
-    enable_vector_dedup: bool = True
+    # Vector settings
+    vector: VectorSettings = VectorSettings()
 ```
 
-### 5. Default Hook Registration
+### 4. Database Clear Operation
 
-**File**: `kg_forge/pipeline/default_hooks.py`
+Update `kg_forge/cli/db.py` to also clear ChromaDB:
 
 ```python
-from kg_forge.pipeline.hooks.normalization import (
-    basic_normalize_entities,
-    dictionary_normalize_entities
-)
-from kg_forge.pipeline.hooks.deduplication import (
-    fuzzy_deduplicate_entities,
-    vector_deduplicate_entities
-)
-
-def register_default_hooks(registry: HookRegistry) -> None:
-    """Register default pipeline hooks."""
+def clear_namespace(namespace: str, confirm: bool = False):
+    """Clear both Neo4j and ChromaDB for namespace."""
+    # Clear Neo4j
+    neo4j_count = graph_client.schema_manager.clear_namespace(namespace)
     
-    # Normalization (run first)
-    registry.register('before_store', basic_normalize_entities)
-    registry.register('before_store', dictionary_normalize_entities)
+    # Clear ChromaDB
+    from kg_forge.vector.chroma import ChromaVectorStore
+    vector_store = ChromaVectorStore()
+    chroma_count = vector_store.delete_namespace(namespace)
     
-    # Deduplication (run after normalization)
-    registry.register('before_store', fuzzy_deduplicate_entities)
-    registry.register('before_store', vector_deduplicate_entities)
+    logger.info(
+        f"Cleared namespace '{namespace}': "
+        f"{neo4j_count} graph nodes, {chroma_count} vectors"
+    )
 ```
 
 ## Testing
 
 ### Unit Tests
 
-**File**: `tests/test_pipeline/hooks/test_vector_dedup.py`
+**File**: `tests/test_vector/test_chroma.py`
 
 ```python
-"""Tests for vector-based entity deduplication."""
+"""Tests for ChromaDB vector store."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
-import numpy as np
+import tempfile
+import shutil
+from pathlib import Path
 
-from kg_forge.pipeline.hooks.deduplication.vector import (
-    VectorDeduplicator,
-    vector_deduplicate_entities
-)
-from kg_forge.models.extraction import ExtractedEntity, ExtractionResult
+from kg_forge.vector.chroma import ChromaVectorStore
 
 
-class TestVectorDeduplicator:
-    """Test VectorDeduplicator class."""
+class TestChromaVectorStore:
+    """Test ChromaDB vector store implementation."""
     
-    def test_get_embedding(self):
-        """Test embedding generation."""
-        dedup = VectorDeduplicator()
-        
-        embedding = dedup.get_embedding("kubernetes")
-        
-        # Should return 384-dimensional vector for all-MiniLM-L6-v2
-        assert len(embedding) == 384
-        assert all(isinstance(x, float) for x in embedding)
+    @pytest.fixture
+    def temp_dir(self):
+        """Create temporary directory for ChromaDB."""
+        temp = tempfile.mkdtemp()
+        yield temp
+        shutil.rmtree(temp, ignore_errors=True)
     
-    def test_similar_texts_have_high_similarity(self):
-        """Test that similar texts produce similar embeddings."""
-        dedup = VectorDeduplicator()
-        
-        emb1 = np.array(dedup.get_embedding("machine learning"))
-        emb2 = np.array(dedup.get_embedding("ML algorithms"))
-        emb3 = np.array(dedup.get_embedding("database"))
-        
-        # Cosine similarity
-        sim_ml = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
-        sim_db = np.dot(emb1, emb3) / (np.linalg.norm(emb1) * np.linalg.norm(emb3))
-        
-        # ML terms should be more similar than ML vs database
-        assert sim_ml > sim_db
-        assert sim_ml > 0.7  # Reasonably high similarity
+    @pytest.fixture
+    def vector_store(self, temp_dir):
+        """Create ChromaVectorStore instance."""
+        return ChromaVectorStore(persist_directory=temp_dir)
     
-    def test_find_similar_with_matches(self):
-        """Test finding similar entities."""
-        dedup = VectorDeduplicator()
-        
-        entity = ExtractedEntity(
+    def test_add_and_search(self, vector_store):
+        """Test adding and searching entities."""
+        # Add entities
+        vector_store.add_entity(
+            entity_id="tech-1",
             entity_type="Technology",
-            name="k8s",
-            properties={"normalized_name": "kubernetes"}
+            entity_name="Kubernetes",
+            embedding=[0.1] * 384,
+            namespace="test"
         )
         
-        # Mock entity repo
-        mock_repo = Mock()
-        existing_entity = ExtractedEntity(
+        # Search
+        results = vector_store.search_similar(
             entity_type="Technology",
-            name="Kubernetes"
+            embedding=[0.1] * 384,
+            namespace="test",
+            threshold=0.9
         )
-        existing_entity.id = "existing-1"
-        mock_repo.vector_search.return_value = [existing_entity]
         
-        # Find similar
-        similar = dedup.find_similar(entity, mock_repo, "default", 0.85)
-        
-        assert similar is not None
-        assert similar.name == "Kubernetes"
-
-
-class TestVectorDeduplicateEntitiesHook:
-    """Test vector_deduplicate_entities hook."""
+        assert len(results) == 1
+        assert results[0][0] == "tech-1"
     
-    def test_vector_dedup_marks_duplicates(self):
-        """Test that vector dedup marks similar entities."""
-        # Mock context
-        context = Mock()
-        context.logger = Mock()
-        context.settings = Mock()
-        context.settings.pipeline = Mock()
-        context.settings.pipeline.vector_threshold = 0.85
-        context.settings.pipeline.embedding_model = 'all-MiniLM-L6-v2'
-        context.namespace = "default"
-        
-        # Mock entity repo
-        mock_repo = Mock()
-        existing = ExtractedEntity(
-            entity_type="Technology",
-            name="Kubernetes",
-            properties={'normalized_name': 'kubernetes'}
+    def test_namespace_isolation(self, vector_store):
+        """Test that namespaces are isolated."""
+        # Add to namespace1
+        vector_store.add_entity(
+            "e1", "Type1", "Entity1", [0.5] * 384, "ns1"
         )
-        existing.id = 'existing-1'
-        mock_repo.vector_search.return_value = [existing]
         
-        context.graph_client = Mock()
-        context.graph_client.entity_repo = mock_repo
+        # Add to namespace2
+        vector_store.add_entity(
+            "e2", "Type1", "Entity2", [0.5] * 384, "ns2"
+        )
         
-        # Entity to deduplicate
-        entities = [
-            ExtractedEntity(
-                entity_type="Technology",
-                name="k8s",
-                properties={'normalized_name': 'kubernetes'}
-            )
-        ]
+        # Search in ns1 should not find ns2 entities
+        results = vector_store.search_similar(
+            "Type1", [0.5] * 384, "ns1", threshold=0.5
+        )
         
-        extraction_result = ExtractionResult(entities=entities)
-        
-        # Run hook
-        result = vector_deduplicate_entities(context, extraction_result)
-        
-        # Verify
-        assert hasattr(result.entities[0], 'duplicate_of')
-        assert result.entities[0].duplicate_of == 'Kubernetes'
+        assert len(results) == 1
+        assert results[0][0] == "e1"
 ```
 
 ## Dependencies
@@ -542,61 +638,36 @@ jellyfish>=1.0.0
 # Vector deduplication
 sentence-transformers>=2.2.0
 torch>=2.0.0
-transformers>=4.30.0
+chromadb>=0.4.0  # NEW: ChromaDB for vector storage
 ```
 
 ## Implementation Checklist
 
-- [ ] Implement VectorDeduplicator class
-- [ ] Implement vector_deduplicate_entities hook
-- [ ] Add vector_search method to EntityRepository
-- [ ] Add store_entity_with_embedding method to EntityRepository
-- [ ] Create vector index in Neo4j schema
-- [ ] Update configuration settings
-- [ ] Register vector dedup in default hooks
-- [ ] Write unit tests
-- [ ] Write integration tests
+- [ ] Create vector store abstraction (`vector/base.py`)
+- [ ] Implement ChromaDB backend (`vector/chroma.py`)
+- [ ] Update VectorDeduplicator to use ChromaDB
+- [ ] Update vector_deduplicate_entities hook
+- [ ] Add vector settings to configuration
+- [ ] Update db clear command to handle ChromaDB
+- [ ] Write ChromaDB unit tests
+- [ ] Write vector dedup integration tests
 - [ ] Update documentation
-- [ ] Performance testing with large entity sets
-
-## Usage Example
-
-```python
-from kg_forge.pipeline.orchestrator import PipelineOrchestrator
-
-# Vector dedup is enabled by default
-orchestrator = PipelineOrchestrator(settings)
-result = orchestrator.run(document, namespace="confluence")
-
-# Disable vector dedup if needed
-settings.pipeline.enable_vector_dedup = False
-
-# Or customize threshold
-settings.pipeline.vector_threshold = 0.90  # More strict matching
-```
-
-## Performance Considerations
-
-1. **Model Loading**: Sentence-transformers model is loaded once and reused
-2. **Embedding Storage**: 384 floats per entity (~1.5KB per embedding)
-3. **Vector Index**: Neo4j vector index provides O(log n) search complexity
-4. **Batch Processing**: Consider batching embedding generation for large entity sets
+- [ ] Performance testing
 
 ## Success Criteria
 
-1. ✅ Vector dedup detects semantic duplicates missed by fuzzy matching
-2. ✅ Processing time remains under 2x compared to fuzzy-only dedup
-3. ✅ Vector index searches return results in <100ms
-4. ✅ All unit tests pass with >80% coverage
-5. ✅ Integration with existing pipeline hooks works seamlessly
-6. ✅ Embeddings are stored correctly in Neo4j
-7. ✅ Vector search returns relevant matches above threshold
+1. ✅ ChromaDB stores and retrieves embeddings correctly
+2. ✅ Vector dedup detects semantic duplicates missed by fuzzy matching
+3. ✅ All unit tests pass with >80% coverage
+4. ✅ ChromaDB persists across restarts
+5. ✅ Namespace isolation works correctly
+6. ✅ Clear namespace removes both Neo4j and ChromaDB data
+7. ✅ No dependency on Neo4j Enterprise Edition
 
 ## Future Enhancements
 
-- Support for different embedding models (OpenAI, Cohere, etc.)
-- Multilingual embedding models
-- Fine-tuned models for domain-specific terminology
+- Support for different embedding models
+- Batch embedding generation
+- Alternative vector stores (Qdrant, LanceDB)
 - Hybrid search combining fuzzy + vector scores
-- Batch embedding generation for performance
-- Embedding dimensionality reduction options
+- Vector index optimization and tuning
