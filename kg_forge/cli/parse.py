@@ -38,10 +38,10 @@ def parse_html(ctx: click.Context, source: Path, show_content: bool, show_links:
     
     Use --verbose flag to see detailed parsing information.
     """
-    # Get settings from context
-    settings = ctx.obj.get("settings")
+    # Get settings from context (may be None in test environments)
+    settings = ctx.obj.get("settings") if ctx.obj else None
     
-   # Create verbose logger if verbose mode is enabled
+    # Create verbose logger if verbose mode is enabled
     verbose_logger = None
     if settings and settings.app.verbose:
         verbose_logger = create_verbose_logger(enabled=True)
