@@ -1,0 +1,65 @@
+{
+  "entities": [
+    {
+      "name": "Content Lake",
+      "type": "product",
+      "confidence": 0.95,
+      "properties": {
+        "description": "A centralized data repository for storing content"
+      }
+    },
+    {
+      "name": "React",
+      "type": "technology",
+      "confidence": 0.9,
+      "properties": {
+        "category": "frontend framework"
+      }
+    },
+    {
+      "name": "PostgreSQL",
+      "type": "technology",
+      "confidence": 0.85,
+      "properties": {
+        "category": "database"
+      }
+    },
+    {
+      "name": "Platform Team",
+      "type": "engineering_team",
+      "confidence": 0.9,
+      "properties": {
+        "size": "12"
+      }
+    }
+  ],
+  "relations": [
+    {
+      "from_entity": 0,
+      "to_entity": 1,
+      "type": "uses_technology",
+      "confidence": 0.9,
+      "properties": {
+        "context": "frontend"
+      }
+    },
+    {
+      "from_entity": 0,
+      "to_entity": 2,
+      "type": "uses_technology",
+      "confidence": 0.85,
+      "properties": {
+        "context": "data storage"
+      }
+    },
+    {
+      "from_entity": 3,
+      "to_entity": 0,
+      "type": "owns",
+      "confidence": 0.95,
+      "properties": {
+        "since": "2023"
+      }
+    }
+  ]
+}

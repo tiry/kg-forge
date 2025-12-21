@@ -17,7 +17,7 @@ from kg_forge.models.pipeline import (
     PipelineStatistics,
 )
 from kg_forge.models.document import ParsedDocument
-from kg_forge.models.extraction import ExtractionRequest, ExtractedEntity
+from kg_forge.models.extraction import ExtractionRequest, ExtractedEntity, ExtractedRelationship
 from kg_forge.extractors.base import EntityExtractor
 from kg_forge.parsers.html_parser import ConfluenceHTMLParser
 from kg_forge.parsers.document_loader import DocumentLoader
@@ -255,6 +255,7 @@ class PipelineOrchestrator:
             
             # Run before_store hooks
             entities = extraction_result.entities
+            relationships = extraction_result.relationships  # Extract relationships
             if self.hook_registry.before_store_hooks:
                 entities = self.hook_registry.run_before_store(
                     doc,
@@ -270,13 +271,14 @@ class PipelineOrchestrator:
             if not self.config.dry_run:
                 entities_created, relationships_created = self._ingest_to_graph(
                     doc,
-                    entities
+                    entities,
+                    relationships  # Pass relationships to ingestion
                 )
                 
                 # Track entities for after_batch hooks
                 self.batch_entities.extend(entities)
             else:
-                logger.debug(f"Dry run: Would have stored {len(entities)} entities from {doc.doc_id}")
+                logger.debug(f"Dry run: Would have stored {len(entities)} entities and {len(relationships)} relationships from {doc.doc_id}")
             
             return DocumentProcessingResult(
                 document_id=doc.doc_id,
@@ -337,14 +339,16 @@ class PipelineOrchestrator:
     def _ingest_to_graph(
         self,
         doc: ParsedDocument,
-        entities: List[ExtractedEntity]
+        entities: List[ExtractedEntity],
+        relationships: List[ExtractedRelationship] = None
     ) -> tuple:
         """
-        Ingest document and entities into Neo4j.
+        Ingest document, entities, and relationships into Neo4j.
         
         Args:
             doc: Document to store
             entities: Extracted entities to store
+            relationships: Extracted relationships to store (with entity indices)
             
         Returns:
             Tuple of (entities_created, relationships_created)
@@ -355,6 +359,9 @@ class PipelineOrchestrator:
         namespace = self.config.namespace
         entities_created = 0
         relationships_created = 0
+        
+        if relationships is None:
+            relationships = []
         
         try:
             # Create/update document (correct parameter order)
@@ -395,11 +402,71 @@ class PipelineOrchestrator:
             
             logger.debug(f"Ingested {len(entities)} entities from {doc.doc_id}")
             
+            # Create entity-to-entity relationships (resolve indices AFTER hooks have run)
+            entity_relationships_created = 0
+            for relation in relationships:
+                try:
+                    # Resolve indices to entities
+                    from_entity = entities[relation.from_index]
+                    to_entity = entities[relation.to_index]
+                    
+                    # Verify both entities exist in graph
+                    from_entity_data = self.entity_repo.get_entity(
+                        namespace=namespace,
+                        entity_type=from_entity.entity_type,
+                        name=from_entity.name
+                    )
+                    
+                    to_entity_data = self.entity_repo.get_entity(
+                        namespace=namespace,
+                        entity_type=to_entity.entity_type,
+                        name=to_entity.name
+                    )
+                    
+                    if not from_entity_data or not to_entity_data:
+                        logger.warning(
+                            f"Skipping relationship {relation.relation_type}: "
+                            f"entity not found in graph "
+                            f"({from_entity.entity_type}/{from_entity.name} -> "
+                            f"{to_entity.entity_type}/{to_entity.name})"
+                        )
+                        continue
+                    
+                    # Create relationship using resolved entity names
+                    self.entity_repo.create_relationship(
+                        namespace=namespace,
+                        from_entity_type=from_entity.entity_type,
+                        from_entity_name=from_entity_data['name'],
+                        to_entity_type=to_entity.entity_type,
+                        to_entity_name=to_entity_data['name'],
+                        rel_type=relation.relation_type,
+                        confidence=relation.confidence,
+                        **relation.properties
+                    )
+                    entity_relationships_created += 1
+                    logger.debug(
+                        f"Created relationship: {from_entity.entity_type}/{from_entity.name} "
+                        f"-[{relation.relation_type}]-> {to_entity.entity_type}/{to_entity.name}"
+                    )
+                    
+                except IndexError as e:
+                    logger.warning(
+                        f"Skipping relationship {relation.relation_type}: "
+                        f"invalid entity index ({e})"
+                    )
+                except GraphError as e:
+                    logger.warning(
+                        f"Failed to create relationship {relation.relation_type}: {e}"
+                    )
+            
+            if entity_relationships_created > 0:
+                logger.debug(f"Created {entity_relationships_created} entity relationships from {doc.doc_id}")
+            
         except GraphError as e:
             logger.error(f"Graph ingestion failed for {doc.doc_id}: {e}")
             raise
         
-        return entities_created, relationships_created
+        return entities_created, relationships_created + entity_relationships_created
     
     def _update_statistics(self, result: DocumentProcessingResult):
         """

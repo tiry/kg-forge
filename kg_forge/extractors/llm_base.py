@@ -129,7 +129,8 @@ class LLMEntityExtractor(EntityExtractor):
                 tokens_used = response.get("tokens")
                 
                 # Parse response (may raise ParseError)
-                entities = self.parser.parse(response_text)
+                # Parser now returns tuple of (entities, relationships)
+                entities, relationships = self.parser.parse(response_text)
                 
                 # Verbose logging: Log the successful response
                 if self.verbose_logger:
@@ -218,6 +219,7 @@ class LLMEntityExtractor(EntityExtractor):
         
         return ExtractionResult(
             entities=entities,
+            relationships=relationships,  # NEW: Include parsed relationships
             raw_response=response_text,
             model_name=self.model_name,
             tokens_used=tokens_used,

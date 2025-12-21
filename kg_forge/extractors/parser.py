@@ -1,13 +1,13 @@
 """
-Parser for LLM responses into structured entities.
+Parser for LLM responses into structured entities and relationships.
 """
 
 import json
 import re
 import logging
-from typing import List
+from typing import List, Tuple
 
-from kg_forge.models.extraction import ExtractedEntity
+from kg_forge.models.extraction import ExtractedEntity, ExtractedRelationship
 from kg_forge.extractors.base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -23,21 +23,21 @@ class ResponseParser:
     - Unexpected fields
     """
     
-    def parse(self, response_text: str) -> List[ExtractedEntity]:
-        """Parse LLM response into list of ExtractedEntity objects.
+    def parse(self, response_text: str) -> Tuple[List[ExtractedEntity], List[ExtractedRelationship]]:
+        """Parse LLM response into entities and relationships.
         
         Args:
             response_text: Raw text response from LLM
             
         Returns:
-            List of extracted entities
+            Tuple of (entities, relationships)
             
         Raises:
             ParseError: If response cannot be parsed
         """
         if not response_text or not response_text.strip():
             logger.warning("Empty response from LLM")
-            return []
+            return [], []
         
         # Extract JSON from markdown code blocks if present
         json_text = self._extract_json(response_text)
@@ -54,7 +54,7 @@ class ResponseParser:
                 logger.error(f"Full response length: {len(json_text)} characters")
             raise ParseError(f"Invalid JSON in LLM response: {e}")
         
-        # Extract entities from parsed data
+        # Extract entities and relationships from parsed data
         return self._extract_entities(data)
     
     def _extract_json(self, text: str) -> str:
@@ -87,14 +87,14 @@ class ResponseParser:
         # Return as-is if no patterns matched
         return text.strip()
     
-    def _extract_entities(self, data: dict) -> List[ExtractedEntity]:
-        """Extract entities from parsed JSON data.
+    def _extract_entities(self, data: dict) -> Tuple[List[ExtractedEntity], List[ExtractedRelationship]]:
+        """Extract entities AND relationships from parsed JSON data.
         
         Args:
             data: Parsed JSON dictionary
             
         Returns:
-            List of ExtractedEntity objects
+            Tuple of (entities, relationships)
             
         Raises:
             ParseError: If data structure is invalid
@@ -121,7 +121,14 @@ class ResponseParser:
                 continue
         
         logger.info(f"Parsed {len(entities)} entities from response")
-        return entities
+        
+        # Extract relationships (optional field)
+        relationships = self._parse_relationships_list(
+            data.get("relations", []),
+            entities
+        )
+        
+        return entities, relationships
     
     def _parse_entity(self, data: dict) -> ExtractedEntity:
         """Parse single entity from data.
@@ -161,6 +168,97 @@ class ResponseParser:
         return ExtractedEntity(
             entity_type=str(entity_type),
             name=str(name),
+            confidence=confidence,
+            properties=properties
+        )
+    
+    def _parse_relationships_list(
+        self, 
+        relations_data: list, 
+        entities: List[ExtractedEntity]
+    ) -> List[ExtractedRelationship]:
+        """Parse relationships from JSON array using entity indices.
+        
+        Args:
+            relations_data: List of relationship dictionaries
+            entities: List of entities for index validation
+            
+        Returns:
+            List of ExtractedRelationship objects
+        """
+        if not isinstance(relations_data, list):
+            logger.warning(f"Expected relations to be list, got {type(relations_data).__name__}. Skipping relationships.")
+            return []
+        
+        relationships = []
+        for i, rel_data in enumerate(relations_data):
+            try:
+                rel = self._parse_relationship(rel_data, entities)
+                relationships.append(rel)
+            except Exception as e:
+                logger.warning(f"Failed to parse relationship at index {i}: {e}")
+                continue  # Skip malformed relationships
+        
+        logger.info(f"Parsed {len(relationships)} relationships")
+        return relationships
+    
+    def _parse_relationship(
+        self, 
+        data: dict, 
+        entities: List[ExtractedEntity]
+    ) -> ExtractedRelationship:
+        """Parse single relationship from dict, storing entity INDICES (not resolved names).
+        
+        Args:
+            data: Relationship dict with integer indices
+            entities: List of entities (for validation only)
+            
+        Returns:
+            ExtractedRelationship with stored indices
+            
+        Raises:
+            ValueError: If relationship data is invalid
+        """
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected dict, got {type(data).__name__}")
+        
+        # Get indices (LLM returns integers)
+        from_index = data.get("from_entity")
+        to_index = data.get("to_entity")
+        relation_type = data.get("relation_type") or data.get("type")
+        
+        # Validate indices present
+        if from_index is None or to_index is None or relation_type is None:
+            raise ValueError("Relationship missing required fields (from_entity, to_entity, type/relation_type)")
+        
+        # Convert to int and validate range
+        try:
+            from_idx = int(from_index)
+            to_idx = int(to_index)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid entity index: {e}")
+        
+        if from_idx < 0 or from_idx >= len(entities):
+            raise ValueError(f"from_entity index {from_idx} out of range (0-{len(entities)-1})")
+        
+        if to_idx < 0 or to_idx >= len(entities):
+            raise ValueError(f"to_entity index {to_idx} out of range (0-{len(entities)-1})")
+        
+        # Optional fields
+        confidence = float(data.get("confidence", 1.0))
+        
+        # Extract properties (evidence, etc.)
+        properties = {
+            k: v for k, v in data.items()
+            if k not in ("from_entity", "to_entity", "relation_type", "type", "confidence")
+        }
+        
+        # IMPORTANT: Store INDICES, not resolved names
+        # This allows indices to remain valid after hooks modify entities in-place
+        return ExtractedRelationship(
+            from_index=from_idx,
+            to_index=to_idx,
+            relation_type=str(relation_type).upper(),  # Normalize to uppercase
             confidence=confidence,
             properties=properties
         )

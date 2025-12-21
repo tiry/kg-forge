@@ -21,7 +21,7 @@ class TestResponseParser:
         with open(response, 'r') as f:
             response_text = f.read()
         
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         
         assert len(entities) == 3
         assert entities[0].entity_type == "product"
@@ -40,7 +40,7 @@ class TestResponseParser:
         with open(response, 'r') as f:
             response_text = f.read()
         
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         
         assert len(entities) == 1
         assert entities[0].entity_type == "product"
@@ -59,7 +59,7 @@ class TestResponseParser:
         }
         """
         
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         
         assert len(entities) == 1
         assert entities[0].confidence == 1.0  # Default value
@@ -68,13 +68,13 @@ class TestResponseParser:
         """Test parsing response with no entities."""
         response_text = '{"entities": []}'
         
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         
         assert len(entities) == 0
     
     def test_parse_empty_string(self):
         """Test parsing empty response."""
-        entities = self.parser.parse("")
+        entities, relationships = self.parser.parse("")
         
         assert len(entities) == 0
     
@@ -118,7 +118,7 @@ class TestResponseParser:
         """
         
         # Parser should skip invalid entities and continue
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         assert len(entities) == 0
     
     def test_parse_entity_missing_name(self):
@@ -134,7 +134,7 @@ class TestResponseParser:
         """
         
         # Parser should skip invalid entities
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         assert len(entities) == 0
     
     def test_parse_with_additional_properties(self):
@@ -153,7 +153,7 @@ class TestResponseParser:
         }
         """
         
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         
         assert len(entities) == 1
         assert entities[0].properties.get("description") == "A test product"
@@ -175,7 +175,7 @@ class TestResponseParser:
         """
         
         # Parser should skip invalid entities and log warning
-        entities = self.parser.parse(response_text)
+        entities, relationships = self.parser.parse(response_text)
         
         # Entity with invalid confidence should be skipped
         assert len(entities) == 0
@@ -184,15 +184,15 @@ class TestResponseParser:
         """Test parsing with different type field names."""
         # Test "type"
         response1 = '{"entities": [{"type": "product", "name": "Test1"}]}'
-        entities1 = self.parser.parse(response1)
+        entities1, relationships1 = self.parser.parse(response1)
         assert entities1[0].entity_type == "product"
         
         # Test "entity_type"
         response2 = '{"entities": [{"entity_type": "product", "name": "Test2"}]}'
-        entities2 = self.parser.parse(response2)
+        entities2, relationships2 = self.parser.parse(response2)
         assert entities2[0].entity_type == "product"
         
         # Test "type_id"
         response3 = '{"entities": [{"type_id": "product", "name": "Test3"}]}'
-        entities3 = self.parser.parse(response3)
+        entities3, relationships3 = self.parser.parse(response3)
         assert entities3[0].entity_type == "product"

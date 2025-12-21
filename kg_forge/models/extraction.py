@@ -49,11 +49,43 @@ class ExtractedEntity:
 
 
 @dataclass
+class ExtractedRelationship:
+    """Relationship between two extracted entities using array indices."""
+    
+    from_index: int
+    """Index of source entity in extraction results array."""
+    
+    to_index: int
+    """Index of target entity in extraction results array."""
+    
+    relation_type: str
+    """Relationship type (e.g., 'USES', 'MAINTAINED_BY')."""
+    
+    confidence: float = 1.0
+    """Confidence score from 0.0 to 1.0."""
+    
+    properties: Dict[str, Any] = field(default_factory=dict)
+    """Additional relationship properties (e.g., evidence)."""
+    
+    def __post_init__(self) -> None:
+        """Validate relationship data."""
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(f"Confidence must be between 0.0 and 1.0, got {self.confidence}")
+        if self.from_index < 0:
+            raise ValueError(f"from_index must be non-negative, got {self.from_index}")
+        if self.to_index < 0:
+            raise ValueError(f"to_index must be non-negative, got {self.to_index}")
+
+
+@dataclass
 class ExtractionResult:
     """Result of entity extraction operation."""
     
     entities: List[ExtractedEntity]
     """List of extracted entities."""
+    
+    relationships: List[ExtractedRelationship] = field(default_factory=list)
+    """List of extracted relationships between entities."""
     
     raw_response: Optional[str] = None
     """Raw text response from LLM (for debugging)."""
